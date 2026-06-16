@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile or roster record including role-based access",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Equal to external auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["member", "admin"] },
+        "avatarUrl": { "type": "string" },
+        "joinedAt": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "subTeam": { "type": "string" },
+        "specifications": { "type": "string" },
+        "birthday": { "type": "string" }
+      },
+      "required": ["uid", "displayName", "email", "role"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Robotics active or upcoming builds",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Planning", "Fabricating", "Testing", "Finished"] },
+        "leaderId": { "type": "string" },
+        "leaderName": { "type": "string" },
+        "memberIds": { "type": "array", "description": "User IDs assigned to the project" },
+        "memberNames": { "type": "array", "description": "Member display names" },
+        "deadline": { "type": "string" },
+        "startDate": { "type": "string", "description": "The date when the project was started/initiated" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "kicadLink": { "type": "string" },
+        "budget": { "type": "number" },
+        "estimatedCost": { "type": "number" },
+        "costSplitType": { "type": "string" },
+        "memberCostSplits": { "type": "object" },
+        "budgetItems": { "type": "array" },
+        "sponsorFundings": { "type": "array" }
+      },
+      "required": ["id", "title", "status", "createdBy"]
+    },
+    "ProjectLog": {
+      "title": "Project Log",
+      "description": "Historic update entry added to project logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "projectId", "content", "authorId", "authorName", "createdAt"]
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "An inventory component stored in the central inventory stockroom",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "totalQuantity": { "type": "number" },
+        "availableQuantity": { "type": "number" },
+        "location": { "type": "string" },
+        "specification": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "totalQuantity", "availableQuantity"]
+    },
+    "AllocatedHardware": {
+      "title": "Allocated Hardware",
+      "description": "A specific component and quantity allocated to a project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "allocatedBy": { "type": "string" },
+        "allocatedByName": { "type": "string" },
+        "allocatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "quantity", "allocatedBy", "allocatedByName", "allocatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Inventory product classification category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Idea": {
+      "title": "Build Idea",
+      "description": "Lightweight project/robot/system concept for brainstorming and voting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "creatorAvatar": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "votes": { "type": "number" },
+        "votedIds": { "type": "array" },
+        "status": { "type": "string", "enum": ["Pending", "Discussing", "Promoted"] },
+        "promotedProjectId": { "type": "string" }
+      },
+      "required": ["id", "title", "createdBy", "creatorName", "createdAt", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "Book" },
+      "description": "Collection of user profile sheets"
+    },
+    "/ideas/{ideaId}": {
+      "schema": "Idea",
+      "description": "Ideas Board for member concepts and upvoting"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Project workspace"
+    },
+    "/projects/{projectId}/logs/{logId}": {
+      "schema": "ProjectLog",
+      "description": "Historical log logs for a project"
+    },
+    "/projects/{projectId}/hardware/{hardwareId}": {
+      "schema": "AllocatedHardware",
+      "description": "Hardware allocated permanently to a project"
+    },
+    "/inventory/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Storage inventory items"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Inventory product classification categories"
+    }
+  }
+}

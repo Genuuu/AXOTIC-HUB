@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'anonymous');
+    }
+
+    function isBootstrappedAdmin() {
+      return request.auth.token.email == 'genukakisara@gmail.com';
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+      );
+    }
+
+    function isMember() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (getUserData().role == 'member' || getUserData().role == 'admin'))
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isMember());
+      allow create: if isSignedIn() && (
+        (request.auth.uid == userId && (
+          request.resource.data.role == 'member' || isBootstrappedAdmin() || request.auth.token.firebase.sign_in_provider == 'anonymous'
+        )) ||
+        isAdmin()
+      );
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && 
+         request.resource.data.role == resource.data.role && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'academicYear', 'subTeam', 'specifications', 'birthday'])) ||
+        isAdmin() ||
+        request.auth.token.firebase.sign_in_provider == 'anonymous'
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+      allow create: if isMember() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (resource.data.status != 'Finished' && (
+          (request.auth.uid == resource.data.createdBy || request.auth.uid == resource.data.leaderId || request.auth.uid in resource.data.memberIds) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'status', 'leaderId', 'leaderName', 'memberIds', 'memberNames', 'deadline', 'startDate', 'kicadLink', 'updatedAt', 'budget', 'estimatedCost', 'costSplitType', 'memberCostSplits', 'budgetItems', 'sponsorFundings'])
+        ))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId}/logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isMember() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (request.auth.uid == resource.data.authorId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId}/hardware/{hardwareId} {
+      allow read: if isSignedIn();
+      allow create: if isMember() && request.resource.data.allocatedBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (request.auth.uid == resource.data.allocatedBy && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{itemId} {
+      allow read: if isSignedIn();
+      allow create: if isMember();
+      allow update: if isMember() && (
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['availableQuantity', 'name', 'category', 'description', 'totalQuantity', 'location', 'specification'])
+      );
+      allow delete: if isMember() || isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /ideas/{ideaId} {
+      allow read: if isSignedIn();
+      allow create: if isMember() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (resource.data.status != 'Promoted' && (
+          request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'description', 'category', 'votes', 'votedIds', 'status', 'promotedProjectId', 'updatedAt'])
+        ))
+      );
+      allow delete: if isAdmin() || (isMember() && resource.data.createdBy == request.auth.uid);
+    }
+  }
+}

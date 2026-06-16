@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200;
+}
+
+/* Universal dark theme overrides to guarantee comprehensive and premium visual compatibility */
+.dark {
+  color-scheme: dark;
+}
+
+.dark .bg-white {
+  background-color: #0f172a !important; /* slate-900 */
+}
+
+.dark .bg-slate-50 {
+  background-color: #020617 !important; /* slate-950 */
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important; /* slate-800 */
+}
+
+.dark .bg-slate-50\/50, .dark .bg-slate-50\/20 {
+  background-color: rgba(30, 41, 59, 0.3) !important;
+}
+
+.dark .text-slate-900 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-slate-800 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-755, .dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-650, .dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .border-slate-200, .dark .border-slate-150, .dark .border-slate-100 {
+  border-color: rgba(51, 65, 85, 0.6) !important; /* slate-700 */
+}
+
+.dark .border-slate-250\/60 {
+  border-color: rgba(51, 65, 85, 0.4) !important;
+}
+
+.dark input, .dark select, .dark textarea {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  color: #f1f5f9 !important;
+  border-color: rgba(71, 85, 105, 0.5) !important;
+}
+
+.dark input::placeholder, .dark textarea::placeholder {
+  color: rgba(148, 163, 184, 0.6) !important;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}

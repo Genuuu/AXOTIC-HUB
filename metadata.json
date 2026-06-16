@@ -1,0 +1,8 @@
+{
+  "name": "Team AXOTIC Hub",
+  "description": "Collaborative portal and inventory tracking workspace for the AXOTIC undergraduate robotics team.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
