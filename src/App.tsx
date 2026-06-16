@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { auth, db, testConnectionObj } from "./firebase";
+import { auth, db, testConnectionObj, handleFirestoreError, OperationType } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, onSnapshot, query, orderBy, doc, addDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { 
@@ -254,6 +254,7 @@ export default function App() {
         }, (err) => {
           console.error("Firestore user profile stream failed", err);
           setAuthChecking(false);
+          handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
         });
 
         return () => unsubUserProfile();
