@@ -185,12 +185,10 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
       </main>
 
       {/* Footer */}
-      <footer className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-auto">
-        <div>© 2026 AXOTIC ROBOTICS FOUNDATION</div>
-        <div className="flex gap-4">
-          <a href="#github" className="hover:text-[#0f2e46] transition-colors">Github</a>
-          <span>·</span>
-          <a href="#lab" className="hover:text-[#0f2e46] transition-colors">Lab Telemetry</a>
+      <footer className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-auto text-center sm:text-left">
+        <div className="flex flex-col space-y-1">
+          <span>AXOTIC HUB V1.0</span>
+          <span>© All rights reserved TEAM AXOTIC</span>
         </div>
       </footer>
     </div>

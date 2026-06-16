@@ -238,8 +238,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   };
 
   const handleBulkDelete = async () => {
-    if (!isAdmin) {
-      setBulkActionError("Only administrators are permitted to delete projects.");
+    const selectedProjs = projects.filter(p => selectedProjectIds.includes(p.id));
+    const canDeleteAll = isAdmin || selectedProjs.every(p => p.createdBy === currentUser.uid);
+    
+    if (!canDeleteAll) {
+      setBulkActionError("You can only delete projects that you created, or you need administrator privileges.");
       return;
     }
     if (selectedProjectIds.length === 0) return;
@@ -1272,9 +1275,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     </span>
                   </div>
                   
-                  {isAdmin && (
+                  {(isAdmin || proj.createdBy === currentUser.uid) && (
                     <button
-                      title="Destructive Administrator Override Delete Project"
+                      title="Destructive Delete Project"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteProject(proj.id);
@@ -1428,39 +1431,45 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       </div>
 
       {/* Tabs list inside active screen */}
-      <div className="grid grid-cols-3 bg-slate-100 p-1 rounded-xl max-w-md border border-slate-200/50">
+      <div className="grid grid-cols-3 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl max-w-md border border-slate-200/50 dark:border-slate-800 shrink-0">
         <button
           type="button"
           onClick={() => setWorkspaceTab("budget")}
           className={`flex items-center justify-center gap-1.5 text-center py-2 px-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
             workspaceTab === "budget"
-              ? "bg-white text-emerald-600 shadow-xs border border-slate-250/25"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-3xs border border-slate-250/25 dark:border-slate-700"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
-          <FileText className="size-3.5" /> Expenses Ledger
+          <FileText className="size-3.5 shrink-0" />
+          <span className="sm:hidden">Ledger</span>
+          <span className="hidden sm:inline">Expenses Ledger</span>
         </button>
         <button
           type="button"
           onClick={() => setWorkspaceTab("subsystems")}
           className={`flex items-center justify-center gap-1.5 text-center py-2 px-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
             workspaceTab === "subsystems"
-              ? "bg-white text-blue-600 shadow-xs border border-slate-250/25"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-3xs border border-slate-250/25 dark:border-slate-700"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
-          <FileCheck className="size-3.5" /> Allocated Parts
+          <FileCheck className="size-3.5 shrink-0" />
+          <span className="sm:hidden">Parts</span>
+          <span className="hidden sm:inline">Allocated Parts</span>
         </button>
         <button
           type="button"
           onClick={() => setWorkspaceTab("logs")}
           className={`flex items-center justify-center gap-1.5 text-center py-2 px-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
             workspaceTab === "logs"
-              ? "bg-white text-indigo-600 shadow-xs border border-slate-250/25"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-3xs border border-slate-250/25 dark:border-slate-700"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           }`}
         >
-          <NotebookPen className="size-3.5" /> Build Logs
+          <NotebookPen className="size-3.5 shrink-0" />
+          <span className="sm:hidden">Logs</span>
+          <span className="hidden sm:inline">Build Logs</span>
         </button>
       </div>
 
@@ -2872,22 +2881,20 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
               </div>
 
               {/* Batch Delete Button */}
-              {isAdmin && (
-                <button
-                  type="button"
-                  id="bulk-delete-action-btn"
-                  onClick={() => {
-                    const confirmDel = window.confirm(`Are you absolutely sure you want to delete ${selectedProjectIds.length} projects? This action cannot be undone.`);
-                    if (confirmDel) {
-                      handleBulkDelete();
-                    }
-                  }}
-                  disabled={isBulkProcessing}
-                  className="px-3.5 py-1.5 bg-red-600/90 hover:bg-red-700 border border-red-500/30 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
-                >
-                  <Trash2 className="size-3.5" /> Delete
-                </button>
-              )}
+              <button
+                type="button"
+                id="bulk-delete-action-btn"
+                onClick={() => {
+                  const confirmDel = window.confirm(`Are you absolutely sure you want to delete ${selectedProjectIds.length} projects? This action cannot be undone.`);
+                  if (confirmDel) {
+                    handleBulkDelete();
+                  }
+                }}
+                disabled={isBulkProcessing}
+                className="px-3.5 py-1.5 bg-red-600/90 hover:bg-red-700 border border-red-500/30 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+              >
+                <Trash2 className="size-3.5" /> Delete
+              </button>
 
               {/* Exit selection */}
               <button

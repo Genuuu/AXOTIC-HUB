@@ -56,7 +56,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path,
   };
   console.error("Firestore Action Error Logged:", JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 export async function testConnectionObj() {

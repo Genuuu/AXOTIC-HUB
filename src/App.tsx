@@ -16,16 +16,18 @@ import {
   ArrowRight,
   UserPlus,
   Settings,
-  Home,
-  Sun,
-  Moon,
-  Lightbulb,
+  LayoutGrid,
+  SunDim,
+  MoonStar,
+  Zap,
   Key,
   User,
   Upload,
   X,
   Camera,
-  Trash2
+  Trash2,
+  Cpu,
+  Boxes
 } from "lucide-react";
 import { UserProfile, Project } from "./types";
 import logoUrl from "../Images/Logo.png";
@@ -602,7 +604,7 @@ export default function App() {
                   title="Toggle visual theme"
                   className="size-8 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-400 hover:text-amber-400 transition-all flex items-center justify-center cursor-pointer"
                 >
-                  {isDark ? <Sun className="size-4 text-amber-400" /> : <Moon className="size-4 text-slate-400" />}
+                  {isDark ? <SunDim className="size-4 text-amber-400" /> : <MoonStar className="size-4 text-slate-400" />}
                 </button>
 
                 <button
@@ -617,7 +619,7 @@ export default function App() {
             </div>
 
             {/* Desktop Navigation Links */}
-            <nav id="viewport-nav" className="flex-1 p-4 space-y-1.5 flex flex-col justify-start text-left">
+            <nav id="viewport-nav" className="hidden md:flex flex-1 p-4 space-y-1.5 flex-col justify-start text-left">
               <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-2.5 mb-2 hidden md:block">
                 Member Workspace
               </div>
@@ -631,7 +633,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Home className="size-4" /> Home Dashboard
+                <LayoutGrid className="size-4" /> Home Dashboard
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -649,7 +651,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Compass className="size-4" /> Project Workspace
+                <Cpu className="size-4" /> Project Workspace
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -667,7 +669,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Lightbulb className="size-4" /> Ideas Board
+                <Zap className="size-4" /> Ideas Board
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -685,7 +687,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Warehouse className="size-4" /> Stockroom Inventory
+                <Boxes className="size-4" /> Stockroom Inventory
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -777,6 +779,12 @@ export default function App() {
                   <LogOut className="size-3.5" /> Log Out Workspace
                 </button>
               </div>
+
+              {/* Version & Copyright Footer */}
+              <div className="pt-4 pb-2 text-center flex flex-col space-y-1">
+                <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">AXOTIC HUB V1.0</span>
+                <span className="text-[8px] text-slate-600 font-sans tracking-wide">&copy; All rights reserved TEAM AXOTIC</span>
+              </div>
             </div>
           </aside>
 
@@ -812,7 +820,7 @@ export default function App() {
                     title="Toggle visual theme"
                     className="size-9 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700 text-slate-650 dark:text-slate-350 transition-all flex items-center justify-center cursor-pointer shadow-3xs"
                   >
-                    {isDark ? <Sun className="size-4.5 text-amber-400" /> : <Moon className="size-4.5 text-slate-550" />}
+                    {isDark ? <SunDim className="size-4.5 text-amber-400" /> : <MoonStar className="size-4.5 text-slate-550" />}
                   </button>
 
                   {/* Real-time Indicator banner */}
@@ -832,62 +840,8 @@ export default function App() {
             </header>
 
             {/* Core Content View Area container */}
-            <main id="portal-content-frame" className="flex-1 w-full px-4 sm:px-6 py-6 animate-fade-in flex flex-col overflow-y-auto">
+            <main id="portal-content-frame" className="flex-1 w-full px-4 sm:px-6 pt-6 pb-24 md:py-6 animate-fade-in flex flex-col overflow-y-auto relative">
               
-              {/* Mobile View Navigation segment tab button row */}
-              <div className="md:hidden flex flex-wrap bg-slate-100 border border-slate-200 p-1 rounded-xl mb-6 font-semibold shadow-2xs text-[11px] gap-1">
-                <button
-                  onClick={() => setActiveTab("home")}
-                  className={`flex-1 min-w-[55px] py-2 rounded-lg text-center cursor-pointer transition-all ${
-                    activeTab === "home" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-500"
-                  }`}
-                >
-                  Home
-                </button>
-                <button
-                  onClick={() => setActiveTab("projects")}
-                  className={`flex-1 min-w-[55px] py-2 rounded-lg text-center cursor-pointer transition-all ${
-                    activeTab === "projects" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-500"
-                  }`}
-                >
-                  Workspace
-                </button>
-                <button
-                  onClick={() => setActiveTab("ideas")}
-                  className={`flex-1 min-w-[55px] py-2 rounded-lg text-center cursor-pointer transition-all ${
-                    activeTab === "ideas" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-500"
-                  }`}
-                >
-                  Ideas
-                </button>
-                <button
-                  onClick={() => setActiveTab("inventory")}
-                  className={`flex-1 min-w-[55px] py-2 rounded-lg text-center cursor-pointer transition-all ${
-                    activeTab === "inventory" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-500"
-                  }`}
-                >
-                  Stockroom
-                </button>
-                <button
-                  onClick={() => setActiveTab("roster")}
-                  className={`flex-1 min-w-[55px] py-2 rounded-lg text-center cursor-pointer transition-all ${
-                    activeTab === "roster" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-500"
-                  }`}
-                >
-                  Members
-                </button>
-                {currentUser?.role === "admin" && (
-                  <button
-                    onClick={() => setActiveTab("settings")}
-                    className={`flex-1 min-w-[55px] py-1.5 rounded-lg text-center cursor-pointer transition-all ${
-                      activeTab === "settings" ? "bg-white text-blue-600 shadow-sm font-bold" : "text-slate-500"
-                    }`}
-                  >
-                    Settings
-                  </button>
-                )}
-              </div>
-
               {/* View dispatch router */}
               <div className="flex-1 flex flex-col">
                 {activeTab === "home" && (
@@ -936,6 +890,80 @@ export default function App() {
               </div>
 
             </main>
+
+            {/* Bottom Mobile View Navigation segment tab button row */}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              <div className="flex flex-row overflow-x-auto p-1.5 px-2 text-[10px] sm:text-[11px] font-semibold gap-1 scrollbar-none select-none justify-between items-center sm:justify-around">
+                <button
+                  onClick={() => setActiveTab("home")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "home" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <LayoutGrid className={`size-5 mb-1 ${activeTab === "home" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "home" ? 2.5 : 2} />
+                  <span>Home</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("projects")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "projects" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Cpu className={`size-5 mb-1 ${activeTab === "projects" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "projects" ? 2.5 : 2} />
+                  <span>Workspace</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("ideas")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "ideas" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Zap className={`size-5 mb-1 ${activeTab === "ideas" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "ideas" ? 2.5 : 2} />
+                  <span>Ideas</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("inventory")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "inventory" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Boxes className={`size-5 mb-1 ${activeTab === "inventory" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "inventory" ? 2.5 : 2} />
+                  <span>Stock</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("roster")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "roster" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Users className={`size-5 mb-1 ${activeTab === "roster" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "roster" ? 2.5 : 2} />
+                  <span>Members</span>
+                </button>
+                {currentUser?.role === "admin" && (
+                  <button
+                    onClick={() => setActiveTab("settings")}
+                    className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                      activeTab === "settings" 
+                        ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                        : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Settings className={`size-5 mb-1 ${activeTab === "settings" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "settings" ? 2.5 : 2} />
+                    <span>Settings</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

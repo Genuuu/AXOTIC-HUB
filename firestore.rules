@@ -54,7 +54,7 @@ service cloud.firestore {
         isBootstrappedAdmin() ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['member', 'admin'])) ||
-        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
+        (resource != null && request.auth.token.email != null && resource.data.email == request.auth.token.email)
       );
       allow create: if isEmailVerified() && (
         (request.auth.uid == userId && (
@@ -82,7 +82,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'status', 'leaderId', 'leaderName', 'memberIds', 'memberNames', 'deadline', 'startDate', 'kicadLink', 'updatedAt', 'budget', 'estimatedCost', 'costSplitType', 'memberCostSplits', 'budgetItems', 'sponsorFundings'])
         ))
       );
-      allow delete: if isVerifiedAdmin();
+      allow delete: if isVerifiedAdmin() || (isVerifiedMember() && resource.data.createdBy == request.auth.uid);
     }
 
     match /projects/{projectId}/logs/{logId} {

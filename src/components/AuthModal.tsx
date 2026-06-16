@@ -37,7 +37,17 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       await processUserAccess(user.uid, email, user.displayName, user.photoURL);
     } catch (err: any) {
       console.error("Google Auth Error", err);
-      setErrorText("Google Sign-in popup canceled or failing in iframe environment. Please use the Manual Email Access fallback below!");
+      if (err.code === "auth/unauthorized-domain") {
+        setErrorText(
+          `Unauthorized Domain: Please add "${window.location.hostname}" to the Authorized Domains list in your Firebase Console -> Authentication -> Settings -> Authorized domains.`
+        );
+      } else if (err.code === "auth/admin-restricted-operation") {
+        setErrorText("Admin Restricted Operation: Please make sure the 'Google' sign-in provider is enabled in your Firebase Authentication settings and Identity Toolkit API is enabled.");
+      } else {
+        setErrorText(
+          "Google Sign-in popup canceled or failed. Please check if your domain is authorized or use Manual Access."
+        );
+      }
     } finally {
       setLoading(false);
     }
