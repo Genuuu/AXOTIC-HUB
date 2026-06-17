@@ -31,7 +31,9 @@ import {
   Bell
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
+import { checkIsTodayBirthday } from "./utils";
 import logoUrl from "../Images/Logo.png";
+import { motion, AnimatePresence } from "motion/react";
 
 // Import custom sub-panels
 import PublicLanding from "./components/PublicLanding";
@@ -42,9 +44,11 @@ import InventoryManager from "./components/InventoryManager";
 import MemberRoster from "./components/MemberRoster";
 import AdminSettings from "./components/AdminSettings";
 import IdeasBoard from "./components/IdeasBoard";
+import BirthdaySurprise from "./components/BirthdaySurprise";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isBirthdayClaimed, setIsBirthdayClaimed] = useState(false);
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -69,6 +73,17 @@ export default function App() {
       localStorage.setItem("axotic_theme", "light");
     }
   }, [isDark]);
+
+  useEffect(() => {
+    if (currentUser) {
+      const isBday = checkIsTodayBirthday(currentUser.birthday);
+      const todayStr = new Date().toISOString().split("T")[0];
+      const claimVal = localStorage.getItem(`axotic_bday_claimed_${todayStr}_${currentUser.uid}`) === "true";
+      setIsBirthdayClaimed(claimVal && isBday);
+    } else {
+      setIsBirthdayClaimed(false);
+    }
+  }, [currentUser]);
 
   // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas"
   const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas">("home");
@@ -684,13 +699,26 @@ export default function App() {
                   <Settings className="size-4" />
                 </button>
 
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ scale: 1.05 }}
                   onClick={() => setIsDark(!isDark)}
                   title="Toggle visual theme"
-                  className="size-8 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-400 hover:text-amber-400 transition-all flex items-center justify-center cursor-pointer"
+                  className="size-8 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-400 hover:text-amber-400 transition-colors flex items-center justify-center cursor-pointer relative overflow-hidden"
                 >
-                  {isDark ? <SunDim className="size-4 text-amber-400" /> : <MoonStar className="size-4 text-slate-400" />}
-                </button>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={isDark ? "dark" : "light"}
+                      initial={{ y: -12, opacity: 0, rotate: -45, scale: 0.8 }}
+                      animate={{ y: 0, opacity: 1, rotate: 0, scale: 1 }}
+                      exit={{ y: 12, opacity: 0, rotate: 45, scale: 0.8 }}
+                      transition={{ duration: 0.22, ease: "easeInOut" }}
+                      className="flex items-center justify-center"
+                    >
+                      {isDark ? <SunDim className="size-4 text-amber-400" /> : <MoonStar className="size-4 text-slate-400" />}
+                    </motion.div>
+                  </AnimatePresence>
+                </motion.button>
 
                 <button
                   id="mobile-sign-out-btn"
@@ -798,26 +826,29 @@ export default function App() {
                   Browse active specialists with technical specialty tags, email addresses, and graduation classes.
                 </span>
               </button>
+              
+              <button
+                id="tab-nav-settings"
+                onClick={() => setActiveTab("settings")}
+                className={`w-full px-3 py-2.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2.5 group relative ${
+                  activeTab === "settings"
+                    ? "bg-slate-800 text-blue-400 shadow-sm font-semibold"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                }`}
+              >
+                <Settings className="size-4" /> {currentUser?.role === "admin" ? "System Settings" : "Preferences & Theme"}
 
-              {currentUser?.role === "admin" && (
-                <button
-                  id="tab-nav-settings"
-                  onClick={() => setActiveTab("settings")}
-                  className={`w-full px-3 py-2.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2.5 group relative ${
-                    activeTab === "settings"
-                      ? "bg-slate-800 text-blue-400 shadow-sm font-semibold"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800/60"
-                  }`}
-                >
-                  <Settings className="size-4" /> System Settings
-
-                  <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
-                    <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
-                    <strong className="text-white block font-semibold mb-0.5 text-[11px]">Admin Hub Control</strong>
-                    Configure global taxonomies, component categories, member access clearance levels, and security rules.
-                  </span>
-                </button>
-              )}
+                <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed text-left">
+                  <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
+                  <strong className="text-white block font-semibold mb-0.5 text-[11px]">
+                    {currentUser?.role === "admin" ? "Admin Hub Control" : "Personal Preferences"}
+                  </strong>
+                  {currentUser?.role === "admin" 
+                    ? "Configure global taxonomies, component categories, member access clearance levels, and security rules." 
+                    : "Calibrate visual theme preferences and update personal profile parameters."
+                  }
+                </span>
+              </button>
             </nav>
 
             {/* Bottom active profile widget */}
@@ -831,13 +862,25 @@ export default function App() {
                 />
                 <div className="text-left w-full min-w-0">
                   <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-bold text-white truncate block max-w-[100px]">{currentUser.displayName}</span>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="text-xs font-bold text-white truncate block max-w-[100px]" title={currentUser.displayName}>
+                        {currentUser.displayName}
+                      </span>
+                      {isBirthdayClaimed && (
+                        <span 
+                          className="inline-flex items-center justify-center text-xs animate-bounce shrink-0 select-none cursor-help" 
+                          title="VIP Birthday Gold Specialist Badge active!"
+                        >
+                          🏆
+                        </span>
+                      )}
+                    </div>
                     {currentUser.role === "admin" ? (
-                      <span className="bg-blue-500/15 text-blue-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-500/30 font-mono tracking-wider">
+                      <span className="bg-blue-500/15 text-blue-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-500/30 font-mono tracking-wider shrink-0">
                         Admin
                       </span>
                     ) : (
-                      <span className="bg-slate-800 text-slate-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-slate-700 font-mono tracking-wider">
+                      <span className="bg-slate-800 text-slate-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-slate-700 font-mono tracking-wider shrink-0">
                         Member
                       </span>
                     )}
@@ -886,7 +929,7 @@ export default function App() {
                     {activeTab === "ideas" && "Concept Board & Brainstorming"}
                     {activeTab === "inventory" && "Stockroom & Component Registry"}
                     {activeTab === "roster" && "Active Specialists & Team Directory"}
-                    {activeTab === "settings" && "Hub Command Center & Administration"}
+                    {activeTab === "settings" && (currentUser?.role === "admin" ? "Hub Command Center & Administration" : "Personal Preferences & App Settings")}
                   </h1>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-sans mt-1">
                     {activeTab === "home" && "Overview telemetry on component supply levels, sponsor funding buffers, active competencies, and logs."}
@@ -894,7 +937,10 @@ export default function App() {
                     {activeTab === "ideas" && "Propose custom robot attachments, electronic controllers, software nodes, upvote concepts, and promote them to active projects."}
                     {activeTab === "inventory" && "Manage stockroom part catalog listings."}
                     {activeTab === "roster" && "Active specialists with customizable technical tags, contact credentials, and division roles."}
-                    {activeTab === "settings" && "Manage taxonomy categories, edit member access clearance, and configure workspace params."}
+                    {activeTab === "settings" && (currentUser?.role === "admin" 
+                      ? "Manage taxonomy categories, edit member access clearance, and configure workspace params." 
+                      : "Customize visual theme preferences, adjust private layout options, and calibrate personal profile parameters."
+                    )}
                   </p>
                 </div>
                 
@@ -982,13 +1028,30 @@ export default function App() {
                   </div>
 
                   {/* Theme Toggle Button */}
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    whileHover={{ scale: 1.05 }}
                     onClick={() => setIsDark(!isDark)}
                     title="Toggle visual theme"
-                    className="size-9 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700 text-slate-650 dark:text-slate-350 transition-all flex items-center justify-center cursor-pointer shadow-3xs"
+                    className="size-9 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700 text-slate-650 dark:text-slate-350 transition-colors flex items-center justify-center cursor-pointer shadow-3xs relative overflow-hidden"
                   >
-                    {isDark ? <SunDim className="size-4.5 text-amber-400" /> : <MoonStar className="size-4.5 text-slate-550" />}
-                  </button>
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.div
+                        key={isDark ? "dark" : "light"}
+                        initial={{ y: -12, opacity: 0, rotate: -45, scale: 0.8 }}
+                        animate={{ y: 0, opacity: 1, rotate: 0, scale: 1 }}
+                        exit={{ y: 12, opacity: 0, rotate: 45, scale: 0.8 }}
+                        transition={{ duration: 0.22, ease: "easeInOut" }}
+                        className="flex items-center justify-center"
+                      >
+                        {isDark ? (
+                          <SunDim className="size-4.5 text-amber-400" />
+                        ) : (
+                          <MoonStar className="size-4.5 text-slate-550" />
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </motion.button>
 
                   {/* Real-time Indicator banner */}
                   {currentUser?.isOfflineMock ? (
@@ -1023,6 +1086,7 @@ export default function App() {
                       }
                     }}
                     onOpenEditProfile={handleOpenEditProfile}
+                    isBirthdayClaimed={isBirthdayClaimed}
                   />
                 )}
                 {activeTab === "projects" && (
@@ -1051,8 +1115,12 @@ export default function App() {
                 {activeTab === "roster" && (
                   <MemberRoster currentUser={currentUser} roster={roster} />
                 )}
-                {activeTab === "settings" && currentUser?.role === "admin" && (
-                  <AdminSettings currentUser={currentUser} />
+                {activeTab === "settings" && currentUser && (
+                  <AdminSettings 
+                    currentUser={currentUser} 
+                    isDark={isDark} 
+                    onToggleTheme={() => setIsDark(!isDark)}
+                  />
                 )}
               </div>
 
@@ -1116,19 +1184,17 @@ export default function App() {
                   <Users className={`size-5 mb-1 ${activeTab === "roster" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "roster" ? 2.5 : 2} />
                   <span>Members</span>
                 </button>
-                {currentUser?.role === "admin" && (
-                  <button
-                    onClick={() => setActiveTab("settings")}
-                    className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
-                      activeTab === "settings" 
-                        ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
-                        : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    <Settings className={`size-5 mb-1 ${activeTab === "settings" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "settings" ? 2.5 : 2} />
-                    <span>Settings</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => setActiveTab("settings")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "settings" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Settings className={`size-5 mb-1 ${activeTab === "settings" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "settings" ? 2.5 : 2} />
+                  <span>{currentUser?.role === "admin" ? "Settings" : "Preferences"}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1316,6 +1382,13 @@ export default function App() {
         </div>
       )}
 
+      {currentUser && (
+        <BirthdaySurprise 
+          currentUser={currentUser} 
+          isDark={isDark} 
+          onClaim={() => setIsBirthdayClaimed(true)} 
+        />
+      )}
 
     </div>
   );

@@ -50,6 +50,43 @@ export async function createGlobalNotification(
   }
 }
 
+export async function createAdminLog(
+  action: string,
+  details: string,
+  currentUser: any
+) {
+  if (!currentUser) return;
+  if (currentUser.isOfflineMock) {
+    const local = localStorage.getItem("axotic_mock_admin_logs");
+    let currentLogs: any[] = local ? JSON.parse(local) : [];
+    const newLog = {
+      id: `mock-admin-log-${Date.now()}`,
+      action,
+      details,
+      performedBy: currentUser.uid,
+      performedByName: currentUser.displayName,
+      performedByEmail: currentUser.email || "",
+      createdAt: new Date().toISOString()
+    };
+    localStorage.setItem("axotic_mock_admin_logs", JSON.stringify([newLog, ...currentLogs]));
+    window.dispatchEvent(new Event("axotic_db_update"));
+    return;
+  }
+  
+  try {
+    await addDoc(collection(db, "admin_logs"), {
+      action,
+      details,
+      performedBy: currentUser.uid,
+      performedByName: currentUser.displayName,
+      performedByEmail: currentUser.email || "",
+      createdAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn("Could not create admin log", err instanceof Error ? err.message : String(err));
+  }
+}
+
 export enum OperationType {
   CREATE = "create",
   UPDATE = "update",

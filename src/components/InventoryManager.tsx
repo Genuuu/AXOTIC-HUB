@@ -32,6 +32,24 @@ import {
 } from "lucide-react";
 import { InventoryItem, Project, UserProfile, AllocatedHardware, ProjectLog } from "../types";
 
+const getSpecPoints = (spec: string): string[] => {
+  if (!spec) return [];
+  let parts: string[] = [];
+  if (spec.includes('\n')) {
+    parts = spec.split('\n');
+  } else if (spec.includes(';')) {
+    parts = spec.split(';');
+  } else if (spec.includes(',')) {
+    parts = spec.split(',');
+  } else {
+    parts = [spec];
+  }
+  return parts
+    .map(p => p.trim())
+    .map(p => p.replace(/^[•\-\*\s]+/, '').trim())
+    .filter(Boolean);
+};
+
 interface InventoryManagerProps {
   currentUser: UserProfile;
   projects: Project[];
@@ -918,12 +936,20 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
                 </h3>
                 
                 <p className="text-[11px] text-slate-500 leading-normal line-clamp-2 mt-1.5 min-h-[34px]">
-                  {item.description || "Robotics laboratory stock material."}
+                  {item.description || "Robotics stock material."}
                 </p>
 
                 {item.specification && (
-                  <div className="mt-3 p-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] text-slate-500 font-mono max-h-[64px] overflow-y-auto">
-                    <strong>Specs:</strong> {item.specification}
+                  <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg text-[10px] text-slate-500 font-mono max-h-[120px] overflow-y-auto">
+                    <strong className="text-[9px] uppercase tracking-wider text-slate-400 block mb-1">Technical Specs:</strong>
+                    <ul className="space-y-1 list-none pl-0">
+                      {getSpecPoints(item.specification).map((point, idx) => (
+                        <li key={idx} className="flex items-start gap-1">
+                          <span className="text-blue-500 text-[9px] select-none">▪</span>
+                          <span className="leading-snug">{point}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>

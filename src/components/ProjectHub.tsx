@@ -38,9 +38,11 @@ import {
   ArrowLeft,
   FileText,
   Coins,
-  Search
+  Search,
+  Printer,
+  Download
 } from "lucide-react";
-import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, SponsorFunding } from "../types";
+import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, SponsorFunding, MemberContribution } from "../types";
 
 interface ProjectHubProps {
   currentUser: UserProfile;
@@ -121,6 +123,15 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   const [newSponsorName, setNewSponsorName] = useState("");
   const [newSponsorAmount, setNewSponsorAmount] = useState("");
   const [newSponsorNotes, setNewSponsorNotes] = useState("");
+
+  // New member contributions scratch states
+  const [newContribMemberId, setNewContribMemberId] = useState("");
+  const [newContribAmount, setNewContribAmount] = useState("");
+  const [newContribNotes, setNewContribNotes] = useState("");
+  const [newContribType, setNewContribType] = useState<"reimbursable" | "donation">("reimbursable");
+  
+  // State for print and document format generation
+  const [showPrintModal, setShowPrintModal] = useState(false);
   
   // Custom non-blocking popups for iframe preservation
   const [deleteConfirmProjId, setDeleteConfirmProjId] = useState<string | null>(null);
@@ -975,6 +986,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       case "Fabricating": return "bg-blue-50 text-blue-700 border-blue-200";
       case "Testing": return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "Finished": return "bg-purple-50 text-purple-700 border-purple-200";
+      case "Continuous": return "bg-sky-50 text-sky-700 border-sky-200 animate-pulse";
     }
   };
 
@@ -1076,6 +1088,41 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
 
     const payloadFields = {
       sponsorFundings: updatedSponsors,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (currentUser.isOfflineMock) {
+      const stored = localStorage.getItem("axotic_mock_projects");
+      if (stored) {
+        const items: Project[] = JSON.parse(stored);
+        const idx = items.findIndex(p => p.id === selectedProject.id);
+        if (idx !== -1) {
+          const updatedProj = {
+            ...items[idx],
+            ...payloadFields
+          };
+          items[idx] = updatedProj;
+          localStorage.setItem("axotic_mock_projects", JSON.stringify(items));
+          window.dispatchEvent(new Event("axotic_db_update"));
+          setSelectedProject(updatedProj);
+        }
+      }
+      return;
+    }
+
+    const projectRef = doc(db, "projects", selectedProject.id);
+    try {
+      await updateDoc(projectRef, payloadFields);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `projects/${selectedProject.id}`);
+    }
+  };
+
+  const handleUpdateMemberContributions = async (updatedContributions: MemberContribution[]) => {
+    if (!selectedProject) return;
+
+    const payloadFields = {
+      memberContributions: updatedContributions,
       updatedAt: new Date().toISOString()
     };
 
@@ -1396,6 +1443,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   <option value="Planning">Planning</option>
                   <option value="Fabricating">Fabricating</option>
                   <option value="Testing">Testing</option>
+                  <option value="Continuous">Continuous Development</option>
                   <option value="Finished">Finished Archive 🔒</option>
                 </select>
               ) : (
@@ -1504,7 +1552,17 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
               const costVal = items.reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
               const sponsors = selectedProject.sponsorFundings || [];
               const sponsorTotal = sponsors.reduce((sum, s) => sum + s.amount, 0);
-              const netCostToSplit = Math.max(0, costVal - sponsorTotal);
+              
+              const contributions = selectedProject.memberContributions || [];
+              const contributionTotal = contributions.reduce((sum, c) => sum + c.amount, 0);
+              const memberDonationsTotal = contributions
+                .filter(c => c.type === "donation")
+                .reduce((sum, c) => sum + c.amount, 0);
+              const memberReimbursableTotal = contributions
+                .filter(c => c.type === "reimbursable")
+                .reduce((sum, c) => sum + c.amount, 0);
+
+              const netCostToSplit = Math.max(0, costVal + memberReimbursableTotal - sponsorTotal - memberDonationsTotal);
               
               const participants = Array.from(new Set([selectedProject.leaderId, ...(selectedProject.memberIds || [])])).filter(Boolean);
               const numParticipants = participants.length || 1;
@@ -1520,6 +1578,17 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   spentByMember[paidBy] = 0;
                 }
                 spentByMember[paidBy] += (it.unitCost * it.quantity);
+              });
+
+              // Add direct reimbursable contributions to the member's out-of-pocket spent credit
+              contributions.forEach(c => {
+                if (c.type === "reimbursable") {
+                  const contribBy = c.memberId;
+                  if (spentByMember[contribBy] === undefined) {
+                    spentByMember[contribBy] = 0;
+                  }
+                  spentByMember[contribBy] += c.amount;
+                }
               });
 
               // Calculate fair share per member (offset by sponsor fundings)
@@ -1560,10 +1629,127 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 handleUpdateBudgetItems(updated);
               };
 
+              const handleExportCSV = () => {
+                if (!selectedProject) return;
+                
+                const rows: string[][] = [];
+                
+                // Title
+                rows.push([`Project Finance Sheet: ${selectedProject.title}`]);
+                rows.push([`Exported on: ${new Date().toLocaleString()}`]);
+                rows.push([]);
+                
+                // Summary Section
+                rows.push(["FINANCIAL STATUS SUMMARY"]);
+                rows.push(["Metric", "Value (LKR)"]);
+                rows.push(["Total Project Budget", budgetVal.toFixed(2)]);
+                rows.push(["Total Cost Sum (Spreadsheet)", costVal.toFixed(2)]);
+                rows.push(["Sponsor Funding (Inbound)", sponsorTotal.toFixed(2)]);
+                rows.push(["Member Contributions Total", contributionTotal.toFixed(2)]);
+                rows.push(["  - Reimbursable Contributions", memberReimbursableTotal.toFixed(2)]);
+                rows.push(["  - Gift Donations", memberDonationsTotal.toFixed(2)]);
+                rows.push(["Net Member Cost to Split", netCostToSplit.toFixed(2)]);
+                rows.push(["Total Members Shared", numParticipants.toString()]);
+                rows.push(["Target Share Per Member", (netCostToSplit / numParticipants).toFixed(2)]);
+                rows.push([]);
+                
+                // Section 1: Spreadsheet items
+                rows.push(["PROJECT SPREADSHEET EXPENSES"]);
+                rows.push(["Item Name", "Paid By (UID)", "Paid By (Name)", "Unit Cost (LKR)", "Quantity", "Total Cost (LKR)"]);
+                items.forEach(it => {
+                  rows.push([
+                    it.name,
+                    it.paidById,
+                    getParticipantName(it.paidById),
+                    it.unitCost.toString(),
+                    it.quantity.toString(),
+                    (it.unitCost * it.quantity).toFixed(2)
+                  ]);
+                });
+                rows.push([]);
+                
+                // Section 2: Sponsors
+                rows.push(["EXTERNAL TRUST SPONSORSHIPS"]);
+                rows.push(["Sponsor Name", "Purpose Notes", "Funding Amount (LKR)"]);
+                sponsors.forEach(s => {
+                  rows.push([
+                    s.sponsorName,
+                    s.notes || "",
+                    s.amount.toFixed(2)
+                  ]);
+                });
+                rows.push([]);
+                
+                // Section 3: Member Cash Contributions
+                rows.push(["DIRECT MEMBER CASH CONTRIBUTIONS"]);
+                rows.push(["Contributor UID", "Contributor Name", "Treatment / Type", "Deposit Notes", "Amount (LKR)"]);
+                contributions.forEach(c => {
+                  rows.push([
+                    c.memberId,
+                    getParticipantName(c.memberId),
+                    c.type === "reimbursable" ? "Reimbursable Cost Offset" : "Gift Donation Offset",
+                    c.notes || "",
+                    c.amount.toFixed(2)
+                  ]);
+                });
+                rows.push([]);
+
+                // Section 4: Individual Balances
+                rows.push(["INDIVIDUAL MEMBER COST BREAKDOWN & BALANCE"]);
+                rows.push(["Member Name", "Gross Out-of-Pocket Spent (LKR)", "Fair Target Cost Share (LKR)", "Net Balance (LKR)"]);
+                participants.forEach(uid => {
+                  const grossSpent = spentByMember[uid] || 0;
+                  const fairShare = fairShares[uid] || 0;
+                  const bal = grossSpent - fairShare;
+                  rows.push([
+                    getParticipantName(uid),
+                    grossSpent.toFixed(2),
+                    fairShare.toFixed(2),
+                    bal.toFixed(2)
+                  ]);
+                });
+                rows.push([]);
+
+                // Section 5: Settlement Plan
+                rows.push(["RECOMMENDED TRANSACTIONS TO SETTLE BALANCES"]);
+                rows.push(["Debtor / Payer Name", "Action Phrase", "Creditor / Recipient Name", "Payment Amount (LKR)"]);
+                settlements.forEach(tx => {
+                  rows.push([
+                    tx.from,
+                    "pays directly to",
+                    tx.to,
+                    tx.amount.toFixed(2)
+                  ]);
+                });
+
+                // Generate CSV string safe from delimiters
+                const csvString = rows
+                  .map(row => 
+                    row.map(cell => {
+                      const escapedVal = (cell || "").toString().replace(/"/g, '""');
+                      if (escapedVal.includes(",") || escapedVal.includes('"') || escapedVal.includes("\n")) {
+                        return `"${escapedVal}"`;
+                      }
+                      return escapedVal;
+                    }).join(",")
+                  )
+                  .join("\n");
+                
+                const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const clickLink = document.createElement("a");
+                clickLink.href = url;
+                clickLink.setAttribute("download", `${selectedProject.title.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_ledger_export.csv`);
+                document.body.appendChild(clickLink);
+                clickLink.click();
+                document.body.removeChild(clickLink);
+                URL.revokeObjectURL(url);
+              };
+
               return (
                 <div className="space-y-6">
                   {/* Ledger summary banner */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 border border-slate-200/60 rounded-xl p-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 border border-slate-200/60 rounded-xl p-4">
                     <div className="space-y-1">
                       <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5 select-none">
                         <Coins className="size-4 text-emerald-600" />
@@ -1572,23 +1758,46 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       <p className="text-[11px] text-slate-500">Live spreadsheet estimates compared to budget limits.</p>
                     </div>
                     
-                    <span className={`text-xs font-bold px-3 py-1 rounded-full select-none border self-start ${
-                      isOverBudget 
-                        ? "bg-red-50 text-red-700 border-red-200" 
-                        : budgetVal > 0 
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-250/20" 
-                          : "bg-slate-100 text-slate-500 border-slate-205"
-                    }`}>
-                      {isOverBudget 
-                        ? `Over budget limit by LKR ${(costVal - budgetVal).toFixed(2)}` 
-                        : budgetVal > 0 
-                          ? "Within Budget" 
-                          : "Budget Cap Not Configured"}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full select-none border self-start md:self-auto ${
+                        isOverBudget 
+                          ? "bg-red-50 text-red-700 border-red-200" 
+                          : budgetVal > 0 
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-250/20" 
+                            : "bg-slate-100 text-slate-500 border-slate-205"
+                      }`}>
+                        {isOverBudget 
+                          ? `Over budget limit by LKR ${(costVal - budgetVal).toFixed(2)}` 
+                          : budgetVal > 0 
+                            ? "Within Budget" 
+                            : "Budget Cap Not Configured"}
+                      </span>
+
+                      <div className="flex items-center gap-1.5 border-l border-slate-200 pl-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowPrintModal(true)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-800 border border-slate-250/70 rounded-md text-[11px] font-bold transition-all shadow-2xs select-none cursor-pointer"
+                          title="Generate high contrast, ink-friendly printable statement"
+                        >
+                          <Printer className="size-3.5 text-slate-500" />
+                          <span>Print Summary</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExportCSV}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-bold transition-all shadow-2xs select-none cursor-pointer"
+                          title="Export all ledger details to CSV spreadsheet"
+                        >
+                          <Download className="size-3.5" />
+                          <span>Export CSV</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Highlights row */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60">
                       <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-sans">Total Project Budget</div>
                       <div className="text-xl font-bold text-slate-800 font-mono mt-0.5 font-semibold">
@@ -1607,8 +1816,17 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                         LKR {sponsorTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
+                    <div className="bg-blue-50/20 p-4 rounded-xl border border-blue-100/60">
+                      <div className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Member Contributions</div>
+                      <div className="text-xl font-bold text-blue-700 font-mono mt-0.5 font-black">
+                        LKR {contributionTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[8px] text-slate-400 mt-1 font-sans">
+                        Reimbursable: LKR {memberReimbursableTotal.toFixed(0)} | Donations: LKR {memberDonationsTotal.toFixed(0)}
+                      </div>
+                    </div>
                     <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 flex flex-col justify-center">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5">Consumption</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 font-semibold">Consumption</div>
                       {budgetVal > 0 ? (
                         <div>
                           <div className="w-full bg-slate-200/60 h-2 rounded-full overflow-hidden mb-1">
@@ -1623,7 +1841,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                           </div>
                         </div>
                       ) : (
-                        <div className="text-[10px] text-slate-400 italic">Configure budget allowance in Information options.</div>
+                        <div className="text-[10px] text-slate-400 italic font-sans leading-tight">Configure budget allowance in Information options.</div>
                       )}
                     </div>
                   </div>
@@ -1859,7 +2077,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                             <div>
                               <input
                                 type="text"
-                                placeholder="Sponsor (e.g. AXOTIC Hub, Lab Grant, Aerospace Club)"
+                                placeholder="Sponsor (e.g. AXOTIC Hub, Grant, Aerospace Club)"
                                 value={newSponsorName}
                                 onChange={(e) => setNewSponsorName(e.target.value)}
                                 className="w-full bg-white border border-slate-205 focus:border-indigo-500 rounded px-2.5 py-1.5 text-xs outline-hidden shrink-0"
@@ -1927,6 +2145,192 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     </div>
                   </div>
 
+                  {/* DIRECT MEMBER CASH / FUNDING CONTRIBUTIONS */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 pb-2">
+                      <h4 className="text-xs font-bold uppercase text-slate-750 tracking-wider flex items-center gap-1.5 select-none">
+                        <Users className="size-4 text-emerald-600" />
+                        Direct Member Cash Contributions
+                      </h4>
+                      <p className="text-[10px] text-slate-400 italic">
+                        Record when a project member directly contributes cash/funds to the project treasury or material pool.
+                      </p>
+                    </div>
+
+                    {/* Member contributions listing table */}
+                    <div className="bg-slate-50/40 border border-slate-200/60 rounded-xl p-4 space-y-4">
+                      {contributions.length === 0 ? (
+                        <div className="text-center py-6 text-slate-400 text-xs italic bg-white rounded-lg border border-slate-150">
+                          No direct member cash contributions logged yet. Record entries below to credit members for direct financial deposits!
+                        </div>
+                      ) : (
+                        <div className="bg-white border border-slate-150 rounded-lg overflow-hidden shadow-2xs">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase text-[9px] tracking-wider select-none">
+                                <th className="p-2.5">Contributor Member</th>
+                                <th className="p-2.5">Accounting Treatment</th>
+                                <th className="p-2.5">Target notes</th>
+                                <th className="p-2.5 text-right w-1/4">Amount (LKR)</th>
+                                <th className="p-2.5 text-center w-16">Remove</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150">
+                              {contributions.map((c) => (
+                                <tr key={c.id} className="hover:bg-slate-50/40">
+                                  <td className="p-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-slate-800">{getParticipantName(c.memberId)}</span>
+                                      <span className="text-[8px] uppercase tracking-wide bg-slate-100 text-slate-550 font-bold px-1 rounded-sm">
+                                        {getParticipantRoleLabel(c.memberId)}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <span className={`text-[9.5px] font-extrabold uppercase px-2 py-0.5 rounded leading-none ${
+                                      c.type === "reimbursable" 
+                                        ? "bg-blue-50 text-blue-700 border border-blue-200/30" 
+                                        : "bg-purple-50 text-purple-700 border border-purple-200/30"
+                                    }`}>
+                                      {c.type === "reimbursable" ? "Reimbursable Split Credit" : "Direct Gift / Non-Reimbursable"}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-slate-500 italic">{c.notes || "-"}</td>
+                                  <td className="p-2.5 font-mono text-right font-black text-emerald-600">
+                                    LKR {c.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-2.5 text-center">
+                                    {canModifyProject(selectedProject) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nextContribs = contributions.filter(item => item.id !== c.id);
+                                          handleUpdateMemberContributions(nextContribs);
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-red-500 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                        title="Remove contribution"
+                                      >
+                                        <Trash2 className="size-3.5" />
+                                      </button>
+                                    ) : (
+                                      <span className="text-slate-300">-</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Add Member Contribution inline controls */}
+                      {canModifyProject(selectedProject) && (
+                        <div className="bg-white p-3.5 rounded-lg border border-slate-150 space-y-3">
+                          <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-650 flex items-center gap-1 mb-1">
+                            <Plus className="size-3.5 text-emerald-600" /> Log Custom Member Cash Contribution
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+                            {/* Member Dropdown */}
+                            <div>
+                              <select
+                                value={newContribMemberId}
+                                onChange={(e) => setNewContribMemberId(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded px-2 py-1.5 text-xs text-slate-700 outline-hidden font-medium cursor-pointer"
+                              >
+                                <option value="">Select Contributor...</option>
+                                {participants.map(pId => (
+                                  <option key={pId} value={pId}>{getParticipantName(pId)}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Amount field */}
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2.5 text-slate-400 font-mono text-[9px] leading-none select-none font-normal">LKR</span>
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                placeholder="Amount deposited"
+                                value={newContribAmount}
+                                onChange={(e) => setNewContribAmount(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded pl-10 pr-2.5 py-1.5 text-xs text-right font-mono outline-hidden"
+                              />
+                            </div>
+
+                            {/* Treatment Type selector */}
+                            <div>
+                              <select
+                                value={newContribType}
+                                onChange={(e) => setNewContribType(e.target.value as "reimbursable" | "donation")}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded px-2 py-1.5 text-xs text-slate-700 outline-hidden font-medium cursor-pointer"
+                              >
+                                <option value="reimbursable">Reimbursable Split Credit</option>
+                                <option value="donation">Gift Donation (Offset split cost)</option>
+                              </select>
+                            </div>
+
+                            {/* Purpose notes */}
+                            <div>
+                              <input
+                                type="text"
+                                placeholder="Purpose notes (e.g. deposited cash, upfront payment)"
+                                value={newContribNotes}
+                                onChange={(e) => setNewContribNotes(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded px-2.5 py-1.5 text-xs outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center pt-1.5 border-t border-slate-100">
+                            <span className="text-[10px] text-slate-450 max-w-xl leading-relaxed text-left">
+                              {newContribType === "reimbursable" 
+                                ? "💡 Reimbursable: This amount is added to the total project cost to be divided split-wise among all members, and credited fully to the contributor's 'Spent' column." 
+                                : "🎁 Donation: This offsets the net cost split directly, decreasing everyone's out-of-pocket shares without reimbursement."
+                              }
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!newContribMemberId) {
+                                  alert("Please select the contributor member.");
+                                  return;
+                                }
+                                const amt = parseFloat(newContribAmount);
+                                if (isNaN(amt) || amt <= 0) {
+                                  alert("Please enter a valid contribution amount greater than 0.");
+                                  return;
+                                }
+                                const nextContribs = [
+                                  ...contributions,
+                                  {
+                                    id: `contrib-${Date.now()}`,
+                                    memberId: newContribMemberId,
+                                    amount: amt,
+                                    notes: newContribNotes.trim(),
+                                    type: newContribType,
+                                    createdAt: new Date().toISOString()
+                                  }
+                                ];
+                                handleUpdateMemberContributions(nextContribs);
+                                
+                                // Reset
+                                setNewContribMemberId("");
+                                setNewContribAmount("");
+                                setNewContribNotes("");
+                                setNewContribType("reimbursable");
+                              }}
+                              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold rounded-md cursor-pointer hover:shadow-xs transition-all active:scale-98 shrink-0"
+                            >
+                              Log Contribution
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* COST DIVISION SPLIT BREAKDOWN */}
                   <div className="space-y-4 pt-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
@@ -1935,9 +2339,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                         Allocated Funding, Imbalances and Reimbursement Splits
                       </h4>
                       <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-                        {sponsorTotal > 0 && (
-                          <span className="text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-emerald-700 select-none">
-                            Net cost split: LKR {netCostToSplit.toFixed(2)} (Sponsors covered LKR {sponsorTotal.toFixed(2)})
+                        {(sponsorTotal > 0 || memberDonationsTotal > 0) && (
+                          <span className="text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-250/20 px-2 py-0.5 rounded text-emerald-700 select-none">
+                            Net cost split: LKR {netCostToSplit.toFixed(2)} 
+                            {sponsorTotal > 0 && ` (Sponsor Support: LKR ${sponsorTotal.toFixed(2)})`}
+                            {memberDonationsTotal > 0 && ` (Member Donations: LKR ${memberDonationsTotal.toFixed(2)})`}
                           </span>
                         )}
                         <span className="text-[10px] font-bold uppercase bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-600 select-none">
@@ -2034,6 +2440,304 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       )}
                     </div>
                   </div>
+
+                  {/* PRINTABLE / SUMMARY REPORT OVERLAY MODAL */}
+                  <AnimatePresence>
+                    {showPrintModal && (
+                      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto no-print">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          id="financial-print-modal"
+                          className="bg-white text-slate-850 rounded-2xl max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-200"
+                        >
+                          {/* Inject the styling rules for print media dynamically inside the report modal */}
+                          <style dangerouslySetInnerHTML={{__html: `
+                            @media print {
+                              body * {
+                                visibility: hidden !important;
+                              }
+                              #financial-print-modal, #financial-print-modal * {
+                                visibility: visible !important;
+                              }
+                              #financial-print-modal {
+                                position: absolute !important;
+                                left: 0 !important;
+                                top: 0 !important;
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                background: white !important;
+                                color: black !important;
+                                box-shadow: none !important;
+                                border: none !important;
+                                padding: 0 !important;
+                                margin: 0 !important;
+                              }
+                              .no-print {
+                                display: none !important;
+                              }
+                            }
+                          `}} />
+
+                          {/* Report Header */}
+                          <div className="border-b-2 border-slate-900 pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                            <div>
+                              <div className="text-[10px] uppercase tracking-wider text-indigo-600 font-extrabold no-print">
+                                Financial Ledger & Settlement Statement
+                              </div>
+                              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                                {selectedProject.title}
+                              </h2>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Generated: <strong className="text-slate-800">{new Date().toLocaleString()}</strong> | Leader: <strong className="text-slate-800">{selectedProject.leaderName}</strong>
+                              </p>
+                            </div>
+                            <div className="text-left md:text-right text-xs text-slate-500 border-l-2 md:border-l-0 md:border-r-2 border-slate-300 pl-3 md:pl-0 md:pr-3">
+                              <span className="block text-[9px] uppercase tracking-widest font-black text-slate-400">System Source</span>
+                              <span className="font-extrabold text-slate-800 font-mono">AXOTIC Project Hub</span>
+                            </div>
+                          </div>
+
+                          {/* Dashboard Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-b border-slate-150 pb-5">
+                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-155 text-left">
+                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">Project Budget</span>
+                              <span className="font-mono text-sm sm:text-base font-bold text-slate-900">
+                                LKR {budgetVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-155 text-left">
+                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">Spreadsheet Cost</span>
+                              <span className="font-mono text-sm sm:text-base font-bold text-slate-900">
+                                LKR {costVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-155 text-left">
+                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">Sponsor Offsets</span>
+                              <span className="font-mono text-sm sm:text-base font-bold text-slate-900">
+                                LKR {sponsorTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-155 text-left">
+                              <span className="block text-[9px] font-bold uppercase text-emerald-800 tracking-wider">Net Cost split</span>
+                              <span className="font-mono text-sm sm:text-base font-black text-emerald-600">
+                                LKR {netCostToSplit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-5 overflow-y-auto max-h-[45vh] pr-1">
+                            {/* Section 1: Itemized Expenses */}
+                            <div className="space-y-2 text-left">
+                              <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
+                                1. Itemized Design Spreadsheet Expenses
+                              </h3>
+                              {items.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic">No expense items logged.</p>
+                              ) : (
+                                <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                  <thead>
+                                    <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
+                                      <th className="p-2 border-r border-slate-200">Item Name</th>
+                                      <th className="p-2 border-r border-slate-200">Paid By</th>
+                                      <th className="p-2 text-right border-r border-slate-200">Unit Cost (LKR)</th>
+                                      <th className="p-2 text-center border-r border-slate-200">Quantity</th>
+                                      <th className="p-2 text-right">Total (LKR)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-150">
+                                    {items.map((it) => (
+                                      <tr key={it.id}>
+                                        <td className="p-2 border-r border-slate-150 font-bold text-slate-805">{it.name}</td>
+                                        <td className="p-2 border-r border-slate-150">{getParticipantName(it.paidById)}</td>
+                                        <td className="p-2 text-right border-r border-slate-150 font-mono">
+                                          {it.unitCost.toLocaleString()}
+                                        </td>
+                                        <td className="p-2 text-center border-r border-slate-150 font-mono">{it.quantity}</td>
+                                        <td className="p-2 text-right font-mono font-bold text-slate-900">
+                                          {(it.unitCost * it.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+
+                            {/* Section 2: Sponsor & Direct Contributions */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
+                              <div className="space-y-2">
+                                <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
+                                  2. Sponsors & Grants
+                                </h3>
+                                {sponsors.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No external sponsor funding logged.</p>
+                                ) : (
+                                  <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                    <thead>
+                                      <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
+                                        <th className="p-2 border-r border-slate-200">Sponsor Name</th>
+                                        <th className="p-2 border-r border-slate-200">Notes</th>
+                                        <th className="p-2 text-right">Amount (LKR)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-150">
+                                      {sponsors.map((s) => (
+                                        <tr key={s.id}>
+                                          <td className="p-2 border-r border-slate-150 font-bold">{s.sponsorName}</td>
+                                          <td className="p-2 border-r border-slate-150 text-slate-500 italic">{s.notes || "-"}</td>
+                                          <td className="p-2 text-right font-mono font-bold text-emerald-600">
+                                            {s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
+                                  3. Member Cash Contributions
+                                </h3>
+                                {contributions.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No member contributions logged.</p>
+                                ) : (
+                                  <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                    <thead>
+                                      <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
+                                        <th className="p-2 border-r border-slate-200">Member Name</th>
+                                        <th className="p-2 border-r border-slate-200">Treatment</th>
+                                        <th className="p-2 text-right">Amount (LKR)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-150">
+                                      {contributions.map((c) => (
+                                        <tr key={c.id}>
+                                          <td className="p-2 border-r border-slate-150 font-bold">{getParticipantName(c.memberId)}</td>
+                                          <td className="p-2 border-r border-slate-150 text-[10px]">
+                                            {c.type === "reimbursable" ? "Reimbursable Split" : "Donation offset"}
+                                          </td>
+                                          <td className="p-2 text-right font-mono font-bold text-blue-600">
+                                            {c.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Section 3: Cost Splits and Balances */}
+                            <div className="space-y-2 text-left">
+                              <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
+                                4. Member Spent Credits and Divided Shares
+                              </h3>
+                              <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                <thead>
+                                  <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
+                                    <th className="p-2 border-r border-slate-200">Project Member</th>
+                                    <th className="p-2 text-right border-r border-slate-200 font-mono">Gross Out-of-Pocket Spent (A)</th>
+                                    <th className="p-2 text-right border-r border-slate-200 font-mono">Fair divided Cost Share (B)</th>
+                                    <th className="p-2 text-right font-bold">Net Balance Due / Receivable (A - B)</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-150">
+                                  {participants.map((pId) => {
+                                    const spent = spentByMember[pId] || 0;
+                                    const share = fairShares[pId] || 0;
+                                    const bal = spent - share;
+                                    return (
+                                      <tr key={pId}>
+                                        <td className="p-2 border-r border-slate-150 font-bold text-slate-805">
+                                          {getParticipantName(pId)} 
+                                          <span className="text-[8px] uppercase text-slate-400 font-mono font-normal ml-1">
+                                            ({getParticipantRoleLabel(pId)})
+                                          </span>
+                                        </td>
+                                        <td className="p-2 text-right font-mono border-r border-slate-150">{spent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        <td className="p-2 text-right font-mono border-r border-slate-150">{share.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        <td className={`p-2 text-right font-mono font-bold ${
+                                          bal > 0.01 
+                                            ? "text-emerald-700 bg-emerald-50/20" 
+                                            : bal < -0.01 
+                                              ? "text-rose-700 bg-rose-50/20" 
+                                              : "text-slate-500"
+                                        }`}>
+                                          {bal > 0 ? "Receivable +" : bal < 0 ? "Owes " : ""}
+                                          {Math.abs(bal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Section 4: Recommended Settlements */}
+                            <div className="space-y-2 text-left bg-slate-50 p-4.5 rounded-xl border border-slate-200">
+                              <h3 className="text-xs font-black uppercase text-slate-805 border-b border-slate-300 pb-1.5 tracking-wider flex items-center gap-1.5 font-mono">
+                                <Coins className="size-4 text-emerald-600 no-print" /> 5. Required Settlement Transfers
+                              </h3>
+                              {settlements.length === 0 ? (
+                                <p className="text-xs text-slate-500 italic">No transfers are necessary. Out-of-pocket funding balances match the divided target shares!</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {settlements.map((tx, index) => (
+                                    <div key={index} className="text-xs flex justify-between items-center bg-white border border-slate-150 px-3 py-1.5 rounded-md">
+                                      <span className="text-slate-700">
+                                        👉 <strong className="text-slate-900">{tx.from}</strong> pays directly to <strong className="text-slate-900">{tx.to}</strong>
+                                      </span>
+                                      <span className="font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
+                                        LKR {tx.amount.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Controls for Interactive Overlay Screen (Hidden on physical page print) */}
+                          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-slate-200 no-print">
+                            <span className="text-[10px] text-slate-450 italic select-none">
+                              🖨️ Pro-tip: Standard printing hides system buttons, margins, and sidebars automatically.
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowPrintModal(false)}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-250/70 transition-all cursor-pointer"
+                              >
+                                Close
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowPrintModal(false);
+                                  handleExportCSV();
+                                }}
+                                className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 border border-slate-250/60 text-slate-700 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Download className="size-3.5" />
+                                Export CSV
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => window.print()}
+                                className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                              >
+                                <Printer className="size-3.5" />
+                                Print Document
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             })()}
@@ -2161,7 +2865,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   <input
                     type="text"
                     className="flex-1 bg-transparent text-xs rounded-lg px-3 py-2 outline-hidden border-0 ring-0 focus:ring-0 placeholder:text-slate-400 focus:outline-hidden"
-                    placeholder="Describe laboratory tests, soldering shield connections, or driver firmware updates..."
+                    placeholder="Describe project tasks, soldering shield connections, or driver firmware updates..."
                     value={newLogContent}
                     onChange={(e) => setNewLogContent(e.target.value)}
                   />
@@ -2902,6 +3606,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   <option value="Planning" className="text-slate-900">Planning</option>
                   <option value="Fabricating" className="text-slate-900">Fabricating</option>
                   <option value="Testing" className="text-slate-900">Testing</option>
+                  <option value="Continuous" className="text-slate-900">Continuous Development</option>
                   <option value="Finished" className="text-slate-900">Finished Archive 🔒</option>
                 </select>
               </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, createAdminLog } from "../firebase";
 import { doc, setDoc, collection } from "firebase/firestore";
 import { UserPlus, Sparkles, CheckCircle2, Calendar, Shield, Mail, Upload, Camera, Trash2, GraduationCap, HardDrive, FileText, Tag } from "lucide-react";
 import { UserProfile, UserRole } from "../types";
@@ -126,6 +126,12 @@ export default function AddMember({ currentUser }: AddMemberProps) {
         rosterList.push(payload);
         localStorage.setItem("axotic_mock_roster", JSON.stringify(rosterList));
 
+        createAdminLog(
+          "MEMBER_ONBOARDED",
+          `Onboarded new member "${displayName.trim()}" directly to active directory division "${subTeam}" as system role "${role}".`,
+          currentUser
+        );
+
         window.dispatchEvent(new Event("axotic_db_update"));
         setSuccessMsg(`Successfully registered ${displayName.trim()} in local Sandbox! They can log in instantly with Google Account: ${email.trim().toLowerCase()}`);
         resetForm();
@@ -171,6 +177,13 @@ export default function AddMember({ currentUser }: AddMemberProps) {
       }
 
       setSuccessMsg(`Successfully registered ${displayName.trim()} to live Firestore database! Whitelist access notification dispatched to: ${email.trim().toLowerCase()}.`);
+      
+      createAdminLog(
+        "MEMBER_ONBOARDED",
+        `Onboarded new member "${displayName.trim()}" directly to active directory division "${subTeam}" as system role "${role}".`,
+        currentUser
+      );
+      
       resetForm();
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `users/${newUid}`);

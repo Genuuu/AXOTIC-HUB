@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, createAdminLog } from "../firebase";
 import { 
   collection, 
   onSnapshot, 
@@ -27,23 +27,43 @@ import {
   ChevronRight,
   RefreshCw,
   Clock,
-  UserPlus
+  UserPlus,
+  UserMinus,
+  ShieldOff,
+  Search,
+  FileCode,
+  SunDim,
+  MoonStar,
+  User,
+  Mail,
+  Phone,
+  Upload
 } from "lucide-react";
-import { UserProfile, UserRole } from "../types";
+import { UserProfile, UserRole, AdminLog } from "../types";
 import AddMember from "./AddMember";
 import TagInput from "./TagInput";
 
 interface AdminSettingsProps {
   currentUser: UserProfile;
+  isDark?: boolean;
+  onToggleTheme?: () => void;
 }
 
-export default function AdminSettings({ currentUser }: AdminSettingsProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"general" | "onboard">("general");
+export default function AdminSettings({ currentUser, isDark = false, onToggleTheme }: AdminSettingsProps) {
+  const [activeSubTab, setActiveSubTab] = useState<"general" | "onboard" | "logs" | "preferences">(() => {
+    return currentUser?.role === "admin" ? "general" : "preferences";
+  });
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Administrative Audit Log State Fields
+  const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
+  const [logSearch, setLogSearch] = useState("");
+  const [logFilterAction, setLogFilterAction] = useState<string>("ALL");
+  const [showClearLogsConfirm, setShowClearLogsConfirm] = useState(false);
 
   // Managing Users state variables
   const [roster, setRoster] = useState<UserProfile[]>([]);
@@ -59,6 +79,24 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
   const [workspaceName, setWorkspaceName] = useState("AXOTIC Robotics Hub");
   const [returnPeriod, setReturnPeriod] = useState("30 days");
   const [allowPublicVisibility, setAllowPublicVisibility] = useState(true);
+
+  // Personal Member Preferences States
+  const [prefDisplayName, setPrefDisplayName] = useState(currentUser?.displayName || "");
+  const [prefPhone, setPrefPhone] = useState(currentUser?.phoneNumber || "");
+  const [prefBirthday, setPrefBirthday] = useState(currentUser?.birthday || "");
+  const [prefAvatarUrl, setPrefAvatarUrl] = useState(currentUser?.avatarUrl || "");
+  const [prefError, setPrefError] = useState("");
+  const [prefSuccess, setPrefSuccess] = useState("");
+  const [savingPref, setSavingPref] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      setPrefDisplayName(currentUser.displayName || "");
+      setPrefPhone(currentUser.phoneNumber || "");
+      setPrefBirthday(currentUser.birthday || "");
+      setPrefAvatarUrl(currentUser.avatarUrl || "");
+    }
+  }, [currentUser]);
 
   // Confirm states
   const [categoryToRemove, setCategoryToRemove] = useState<string | null>(null);
@@ -109,6 +147,93 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
         }
       }, (err) => {
         console.warn("Could not load Firestore categories stream", err instanceof Error ? err.message : String(err));
+      });
+      return () => unsub();
+    }
+  }, [currentUser.isOfflineMock]);
+
+  // Load and auto-seed Admin Audit Logs
+  useEffect(() => {
+    if (currentUser.isOfflineMock) {
+      const loadLogs = () => {
+        const stored = localStorage.getItem("axotic_mock_admin_logs");
+        if (stored) {
+          try {
+            setAdminLogs(JSON.parse(stored));
+            return;
+          } catch (_) {}
+        }
+        // Seed default initial logs if sandbox empty
+        const seedLogs: AdminLog[] = [
+          {
+            id: "seed-log-1",
+            action: "WORKSPACE_CONFIG",
+            details: "Administrative security supervisor initialized. AXOTIC Hub auditing server online.",
+            performedBy: currentUser.uid,
+            performedByName: "Systems Supervisor",
+            performedByEmail: "security@axotic.org",
+            createdAt: new Date(Date.now() - 3600000 * 24).toISOString() // 1 day ago
+          },
+          {
+            id: "seed-log-2",
+            action: "MEMBER_ONBOARDED",
+            details: `Onboarded primary system administrator "${currentUser.displayName}" with master privileges limit.`,
+            performedBy: currentUser.uid,
+            performedByName: "Core Registrar",
+            performedByEmail: "roster@axotic.org",
+            createdAt: new Date(Date.now() - 3600000 * 3).toISOString() // 3 hours ago
+          }
+        ];
+        localStorage.setItem("axotic_mock_admin_logs", JSON.stringify(seedLogs));
+        setAdminLogs(seedLogs);
+      };
+      loadLogs();
+
+      const handleUpdate = () => {
+        const stored = localStorage.getItem("axotic_mock_admin_logs");
+        if (stored) {
+          try {
+            setAdminLogs(JSON.parse(stored));
+          } catch (_) {}
+        }
+      };
+      window.addEventListener("axotic_db_update", handleUpdate);
+      return () => window.removeEventListener("axotic_db_update", handleUpdate);
+    } else {
+      const unsub = onSnapshot(collection(db, "admin_logs"), (snap) => {
+        const list: AdminLog[] = [];
+        snap.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as AdminLog);
+        });
+        // Sort newest first
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setAdminLogs(list);
+      }, (err) => {
+        console.warn("Could not load Firestore admin logs collection", err instanceof Error ? err.message : String(err));
+      });
+      return () => unsub();
+    }
+  }, [currentUser.isOfflineMock]);
+
+  // Load General workspace settings configuration on mount
+  useEffect(() => {
+    if (currentUser.isOfflineMock) {
+      const name = localStorage.getItem("axotic_workspace_name");
+      const period = localStorage.getItem("axotic_return_period");
+      const pub = localStorage.getItem("axotic_public_onboarding");
+      if (name) setWorkspaceName(name);
+      if (period) setReturnPeriod(period);
+      if (pub) setAllowPublicVisibility(pub === "true");
+    } else {
+      const unsub = onSnapshot(doc(db, "settings", "general"), (d) => {
+        if (d.exists()) {
+          const data = d.data();
+          if (data.workspaceName) setWorkspaceName(data.workspaceName);
+          if (data.returnPeriod) setReturnPeriod(data.returnPeriod);
+          if (data.allowPublicVisibility !== undefined) setAllowPublicVisibility(data.allowPublicVisibility);
+        }
+      }, (err) => {
+        console.warn("Could not load Firestore general workspace configurations", err instanceof Error ? err.message : String(err));
       });
       return () => unsub();
     }
@@ -170,6 +295,7 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
       const updatedCats = [...categories, trimmed];
       localStorage.setItem("axotic_mock_categories", JSON.stringify(updatedCats));
       setCategories(updatedCats);
+      createAdminLog("CATEGORY_ADDED", `Registered new hardware category classification: "${trimmed}".`, currentUser);
       window.dispatchEvent(new Event("axotic_db_update"));
       setNewCategoryName("");
       setSuccessMsg(`Successfully registered new category "${trimmed}" in local sandbox.`);
@@ -180,6 +306,7 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
           name: trimmed,
           createdAt: new Date().toISOString()
         });
+        createAdminLog("CATEGORY_ADDED", `Registered new hardware category classification: "${trimmed}".`, currentUser);
         setNewCategoryName("");
         setSuccessMsg(`Successfully registered new category "${trimmed}" permanently.`);
       } catch (err) {
@@ -205,12 +332,14 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
       const currentList = categories.filter(c => c !== catName);
       localStorage.setItem("axotic_mock_categories", JSON.stringify(currentList));
       setCategories(currentList);
+      createAdminLog("CATEGORY_DELETED", `Permanently deleted classification category "${catName}" from taxonomy registry.`, currentUser);
       window.dispatchEvent(new Event("axotic_db_update"));
       setSuccessMsg(`Removed category "${catName}" from sandbox.`);
       setLoading(false);
     } else {
       try {
         await deleteDoc(doc(db, "categories", catName));
+        createAdminLog("CATEGORY_DELETED", `Permanently deleted classification category "${catName}" from taxonomy registry.`, currentUser);
         setSuccessMsg(`Permanently deleted category "${catName}" from the database.`);
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, `categories/${catName}`);
@@ -253,6 +382,11 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
               phoneNumber: editPhone
             };
             localStorage.setItem("axotic_mock_roster", JSON.stringify(rosterList));
+            createAdminLog(
+              "USER_OVERRIDE",
+              `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${editRole}", department set to "${editSubTeam}", contact: "${editPhone}".`,
+              currentUser
+            );
             window.dispatchEvent(new Event("axotic_db_update"));
           }
         } catch (_) {}
@@ -268,6 +402,11 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
           subTeam: editSubTeam,
           phoneNumber: editPhone
         });
+        createAdminLog(
+          "USER_OVERRIDE",
+          `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${editRole}", department set to "${editSubTeam}", contact: "${editPhone}".`,
+          currentUser
+        );
         setSuccessMsg(`Successfully saved administrative profile changes for ${selectedUserForEdit.displayName}.`);
         setSelectedUserForEdit(null);
       } catch (err) {
@@ -303,6 +442,11 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
           const rosterList: UserProfile[] = JSON.parse(stored);
           const filtered = rosterList.filter(u => u.uid !== user.uid);
           localStorage.setItem("axotic_mock_roster", JSON.stringify(filtered));
+          createAdminLog(
+            "USER_DISMISSED",
+            `Dismissed team registration and revoked credentials for "${user.displayName}" (${user.email}).`,
+            currentUser
+          );
           window.dispatchEvent(new Event("axotic_db_update"));
         } catch (_) {}
       }
@@ -312,6 +456,11 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
     } else {
       try {
         await deleteDoc(doc(db, "users", user.uid));
+        createAdminLog(
+          "USER_DISMISSED",
+          `Dismissed team registration and revoked credentials for "${user.displayName}" (${user.email}).`,
+          currentUser
+        );
         setSuccessMsg(`Successfully wiped registration & access credentials for ${user.displayName}.`);
         if (selectedUserForEdit?.uid === user.uid) setSelectedUserForEdit(null);
       } catch (err) {
@@ -323,10 +472,143 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
   };
 
   // General Settings Save
-  const handleSaveGeneralConfig = (e: React.FormEvent) => {
+  const handleSaveGeneralConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSuccessMsg("System configurations updated successfully.");
+    setLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    if (currentUser.isOfflineMock) {
+      localStorage.setItem("axotic_workspace_name", workspaceName);
+      localStorage.setItem("axotic_return_period", returnPeriod);
+      localStorage.setItem("axotic_public_onboarding", String(allowPublicVisibility));
+      
+      createAdminLog(
+        "WORKSPACE_CONFIG",
+        `Updated workspace config parameters: Name: "${workspaceName}", return duration set: "${returnPeriod}", citizen public onboarding flag: "${allowPublicVisibility ? "Enabled" : "Disabled"}".`,
+        currentUser
+      );
+      
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg("System configurations updated and synced with sandbox storage.");
+      setLoading(false);
+    } else {
+      try {
+        await setDoc(doc(db, "settings", "general"), {
+          workspaceName,
+          returnPeriod,
+          allowPublicVisibility,
+          updatedBy: currentUser.uid,
+          updatedAt: new Date().toISOString()
+        });
+
+        createAdminLog(
+          "WORKSPACE_CONFIG",
+          `Updated workspace config parameters: Name: "${workspaceName}", return duration set: "${returnPeriod}", citizen public onboarding flag: "${allowPublicVisibility ? "Enabled" : "Disabled"}".`,
+          currentUser
+        );
+
+        setSuccessMsg("System configurations updated and published permanently.");
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, "settings/general");
+        setErrorMsg("Failed to update general configurations.");
+      } finally {
+        setLoading(false);
+      }
+    }
     setTimeout(() => setSuccessMsg(""), 4000);
+  };
+
+  // Purge Audit log trails
+  const handleClearLogs = async () => {
+    setLoading(true);
+    setSuccessMsg("");
+    setErrorMsg("");
+    setShowClearLogsConfirm(false);
+
+    if (currentUser.isOfflineMock) {
+      localStorage.setItem("axotic_mock_admin_logs", JSON.stringify([]));
+      createAdminLog("AUDIT_PURGED", "Purged entire security timeline history.", currentUser);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg("Confidential audit logs trail was cleared.");
+      setLoading(false);
+    } else {
+      try {
+        createAdminLog("AUDIT_PURGED", "Purged entire security timeline history.", currentUser);
+        setSuccessMsg("Administrative audit records reset.");
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, "admin_logs");
+        setErrorMsg("Failed to purge logs from remote database.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Personal Member Preferences Save Configuration
+  const handleSavePref = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prefDisplayName.trim()) {
+      setPrefError("Profile display name cannot be blank.");
+      return;
+    }
+    setSavingPref(true);
+    setPrefError("");
+    setPrefSuccess("");
+
+    const updatedProfile = {
+      ...currentUser,
+      displayName: prefDisplayName.trim(),
+      phoneNumber: prefPhone.trim(),
+      birthday: prefBirthday,
+      avatarUrl: prefAvatarUrl
+    };
+
+    if (currentUser.isOfflineMock) {
+      localStorage.setItem("axotic_local_auth", JSON.stringify(updatedProfile));
+      
+      const rosterStored = localStorage.getItem("axotic_mock_roster");
+      if (rosterStored) {
+        try {
+          const list: UserProfile[] = JSON.parse(rosterStored);
+          const index = list.findIndex(u => u.uid === currentUser.uid);
+          if (index !== -1) {
+            list[index] = {
+              ...list[index],
+              displayName: prefDisplayName.trim(),
+              phoneNumber: prefPhone.trim(),
+              birthday: prefBirthday,
+              avatarUrl: prefAvatarUrl
+            };
+            localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
+          }
+        } catch (_) {}
+      }
+      
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setPrefSuccess("Your personal preferences have been saved & synced in sandbox storage.");
+      setSavingPref(false);
+      setTimeout(() => setPrefSuccess(""), 4000);
+    } else {
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        await setDoc(userRef, {
+          displayName: prefDisplayName.trim(),
+          phoneNumber: prefPhone.trim(),
+          birthday: prefBirthday,
+          avatarUrl: prefAvatarUrl
+        }, { merge: true });
+
+        localStorage.setItem("axotic_local_auth", JSON.stringify(updatedProfile));
+        setPrefSuccess("Your preferences were updated and synchronized live with the database.");
+      } catch (err) {
+        console.error("Preferences save failed", err);
+        setPrefError("Failed to update preferences. External database error.");
+      } finally {
+        setSavingPref(false);
+        setTimeout(() => setPrefSuccess(""), 4000);
+      }
+    }
   };
 
   // Filter roster listing
@@ -354,34 +636,60 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
       )}
 
       {/* Sub-tabs Navigation */}
-      <div className="flex border border-slate-200 bg-slate-100/80 p-1 rounded-xl gap-1 max-w-sm" id="settings-sub-navigation">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("general")}
-          className={`flex-1 px-3 py-1.8 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-            activeSubTab === "general"
-              ? "bg-slate-900 text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
-          }`}
-          id="btn-subnav-general"
-        >
-          <Sliders className="size-3.5" /> System Controls
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("onboard")}
-          className={`flex-1 px-3 py-1.8 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-            activeSubTab === "onboard"
-              ? "bg-slate-900 text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
-          }`}
-          id="btn-subnav-onboard"
-        >
-          <UserPlus className="size-3.5" /> Onboard Member
-        </button>
-      </div>
+      {currentUser?.role === "admin" && (
+        <div className="flex border border-slate-200 bg-slate-100/80 dark:bg-slate-800/85 p-1 rounded-xl gap-1 max-w-2xl" id="settings-sub-navigation">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("general")}
+            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "general"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-general"
+          >
+            <Sliders className="size-3.5" /> System Controls
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("onboard")}
+            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "onboard"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-onboard"
+          >
+            <UserPlus className="size-3.5" /> Onboard Member
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("logs")}
+            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "logs"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-logs"
+          >
+            <ShieldAlert className="size-3.5" /> Confidential Logs
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("preferences")}
+            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "preferences"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-preferences"
+          >
+            <User className="size-3.5" /> My Preferences
+          </button>
+        </div>
+      )}
 
-      {activeSubTab === "general" ? (
+      {activeSubTab === "general" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* LEFT COLUMN: Categories & Workspace Configs (7 Cols) */}
@@ -460,30 +768,16 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
 
             <form onSubmit={handleSaveGeneralConfig} className="p-6 space-y-6">
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Hub Organization Name</label>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">Hub Organization Name</label>
                   <input
                     type="text"
                     required
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-hidden font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-hidden font-medium dark:bg-slate-950 dark:border-slate-800"
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Standard Checkout Return Duration</label>
-                  <select
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-xl px-2.5 py-2 outline-hidden cursor-pointer"
-                    value={returnPeriod}
-                    onChange={(e) => setReturnPeriod(e.target.value)}
-                  >
-                    <option value="7 days">7 Days Trial Period</option>
-                    <option value="14 days">14 Days Short Deployment</option>
-                    <option value="30 days">30 Days Standard Build Cycle</option>
-                    <option value="60 days">60 Days Semester Clearance</option>
-                  </select>
                 </div>
               </div>
 
@@ -641,7 +935,7 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
                       value={editRole}
                       onChange={(e) => setEditRole(e.target.value as UserRole)}
                     >
-                      <option value="member">Lab Member</option>
+                      <option value="member">Member</option>
                       <option value="admin">Administrator (Full Master Auth)</option>
                     </select>
                   </div>
@@ -683,9 +977,414 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
         </div>
 
       </div>
-      ) : (
+      )}
+
+      {activeSubTab === "onboard" && (
         <div className="animate-in fade-in zoom-in-95 duration-200 bg-white border border-slate-200/60 rounded-2xl p-2 sm:p-4 shadow-2xs">
           <AddMember currentUser={currentUser} />
+        </div>
+      )}
+
+      {activeSubTab === "logs" && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          
+          {/* HEADER SUMMARY CARD */}
+          <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 z-10 text-left">
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest block font-mono">Confidential Security Auditing Panel</span>
+              <h2 className="font-display text-2xl font-black tracking-tight">Hub Operations Audit Trail</h2>
+              <p className="text-xs text-slate-400 font-sans max-w-lg leading-relaxed">
+                This feed aggregates restricted administrative and operation system events inside the Hub stockroom, budget boards, roster permissions, and secure system parameters. This panel is visible exclusively to authorized administrators.
+              </p>
+            </div>
+            <div className="shrink-0 flex items-center gap-4 bg-slate-800/80 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-xs z-10 self-start md:self-auto min-w-[200px]">
+              <div className="p-3 bg-red-500/20 rounded-xl text-red-100 shrink-0">
+                <ShieldAlert className="size-5 text-red-400" />
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Security Log Depth</span>
+                <span className="text-lg font-black font-mono text-red-400">{adminLogs.length} Records</span>
+              </div>
+            </div>
+          </div>
+
+          {/* CONTROL BAR */}
+          <div className="bg-white border border-slate-200/60 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between shadow-2xs">
+            <div className="flex flex-1 flex-col sm:flex-row gap-3 w-full">
+              
+              {/* Search input field */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filter logs by performer, description, email..."
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-10 pr-4 py-2 text-xs outline-hidden font-medium text-slate-700 font-sans"
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Action Category Filter */}
+              <select
+                className="bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-xl px-3 py-2 outline-hidden cursor-pointer font-bold text-slate-600 min-w-[170px]"
+                value={logFilterAction}
+                onChange={(e) => setLogFilterAction(e.target.value)}
+              >
+                <option value="ALL">All Event Types</option>
+                <option value="MEMBER_ONBOARDED">Onboarded Members</option>
+                <option value="USER_OVERRIDE">Role Overrides</option>
+                <option value="USER_DISMISSED">Roster Dismissals</option>
+                <option value="CATEGORY_ADDED">Categories Registered</option>
+                <option value="CATEGORY_DELETED">Categories Wiped</option>
+                <option value="WORKSPACE_CONFIG">General Config Updates</option>
+                <option value="AUDIT_PURGED">Audit Purges</option>
+              </select>
+
+            </div>
+
+            {/* Clear Audit History Trigger */}
+            <button
+              onClick={() => setShowClearLogsConfirm(true)}
+              disabled={adminLogs.length === 0}
+              className="w-full md:w-auto px-4 py-2 border border-rose-200 hover:border-rose-500 text-rose-650 hover:bg-rose-50 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+            >
+              <ShieldOff className="size-3.5 text-rose-600" />
+              Purge Security Log History
+            </button>
+          </div>
+
+          {/* AUDIT LOG TIMELINE */}
+          <div className="bg-white border border-slate-200/60 rounded-2xl overflow-hidden shadow-xs divide-y divide-slate-100 max-h-[580px] overflow-y-auto">
+            
+            {adminLogs
+              .filter(log => {
+                const searchStr = logSearch.toLowerCase();
+                const colMatches = logFilterAction === "ALL" || log.action === logFilterAction;
+                const searchMatches = 
+                  log.details.toLowerCase().includes(searchStr) ||
+                  log.performedByName.toLowerCase().includes(searchStr) ||
+                  log.performedByEmail.toLowerCase().includes(searchStr) ||
+                  log.action.toLowerCase().includes(searchStr);
+                return colMatches && searchMatches;
+              })
+              .map((log) => {
+                // Determine layout details dynamically based on log.action type
+                let actionColor = "bg-slate-100 text-slate-700 border-slate-200/50";
+                let actionBadge = "System Action";
+                let actionIcon = <Sliders className="size-4" />;
+
+                if (log.action === "MEMBER_ONBOARDED") {
+                  actionColor = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                  actionBadge = "Team Onboard";
+                  actionIcon = <UserPlus className="size-4" />;
+                } else if (log.action === "USER_OVERRIDE") {
+                  actionColor = "bg-amber-50 text-amber-700 border-amber-100";
+                  actionBadge = "Clearance Overrode";
+                  actionIcon = <ShieldAlert className="size-4" />;
+                } else if (log.action === "USER_DISMISSED") {
+                  actionColor = "bg-rose-50 text-rose-700 border-rose-100";
+                  actionBadge = "Access Dismissal";
+                  actionIcon = <UserMinus className="size-4" />;
+                } else if (log.action === "CATEGORY_ADDED") {
+                  actionColor = "bg-blue-50 text-blue-700 border-blue-100";
+                  actionBadge = "Classification Tag";
+                  actionIcon = <Tag className="size-4" />;
+                } else if (log.action === "CATEGORY_DELETED") {
+                  actionColor = "bg-red-50 text-red-700 border-red-100";
+                  actionBadge = "Taxonomy Deleted";
+                  actionIcon = <FileCode className="size-4" />;
+                } else if (log.action === "WORKSPACE_CONFIG") {
+                  actionColor = "bg-indigo-50 text-indigo-700 border-indigo-100";
+                  actionBadge = "Config Calibration";
+                  actionIcon = <Sliders className="size-4" />;
+                } else if (log.action === "AUDIT_PURGED") {
+                  actionColor = "bg-slate-900 border-slate-850 text-slate-100";
+                  actionBadge = "Logs Purged";
+                  actionIcon = <ShieldOff className="size-4 text-rose-500" />;
+                }
+
+                return (
+                  <div key={log.id} className="p-5 flex items-start justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                    <div className="flex gap-4 min-w-0 flex-1">
+                      
+                      {/* Left circular avatar-badge identifier */}
+                      <div className={`p-3 rounded-2xl border ${actionColor} shrink-0 self-start`}>
+                        {actionIcon}
+                      </div>
+
+                      {/* Middle summary */}
+                      <div className="space-y-1.5 min-w-0 text-left font-sans">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${actionColor}`}>
+                            {actionBadge}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">Synced via Secure Server</span>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-850 leading-relaxed max-w-4xl break-words">
+                          {log.details}
+                        </p>
+                        
+                        {/* Performer accountability label */}
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-sans">
+                          <span className="font-bold text-slate-705">{log.performedByName}</span>
+                          <span className="text-slate-400 font-mono">({log.performedByEmail})</span>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Right timestamp display */}
+                    <div className="shrink-0 flex flex-col items-end justify-between self-stretch h-full">
+                      <span className="text-[10px] text-slate-500 font-medium font-mono whitespace-nowrap bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                        {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap font-mono mt-1">
+                        {new Date(log.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                  </div>
+                );
+              })}
+
+            {adminLogs.filter(log => {
+              const searchStr = logSearch.toLowerCase();
+              const colMatches = logFilterAction === "ALL" || log.action === logFilterAction;
+              const searchMatches = 
+                log.details.toLowerCase().includes(searchStr) ||
+                log.performedByName.toLowerCase().includes(searchStr) ||
+                log.performedByEmail.toLowerCase().includes(searchStr) ||
+                log.action.toLowerCase().includes(searchStr);
+              return colMatches && searchMatches;
+            }).length === 0 && (
+              <div className="p-16 text-center text-slate-450 text-xs">
+                <ShieldOff className="size-8 text-slate-300 mx-auto mb-2 animate-pulse" />
+                <span className="font-bold block">No restricted audit records found.</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Try adjusting your keyword filter values above.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === "preferences" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in text-left">
+          
+          {/* LEFT SIDE: Visual Appearance & Theme Controls & General Status (5 cols) */}
+          <div className="lg:col-span-5 space-y-8">
+            
+            {/* THEME SELECTOR CARD */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+              <div className="bg-slate-900 dark:bg-slate-950 px-6 py-4 flex items-center gap-2 text-white border-b border-slate-100 dark:border-slate-800">
+                <Sparkles className="size-4 text-amber-500" />
+                <h3 className="font-display text-sm font-bold uppercase tracking-wider">App Appearance & Theme</h3>
+              </div>
+              <div className="p-6 space-y-6">
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Calibrate the active layout colors. Switch to eye-safe dark slate or clean, modern high-contrast light mode.
+                </p>
+
+                {/* Theme Options */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Light theme choice */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isDark && onToggleTheme) onToggleTheme();
+                    }}
+                    className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
+                      !isDark
+                        ? "border-blue-500 bg-blue-50/25 dark:bg-blue-950/10 ring-2 ring-blue-500/20"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <div className="size-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center mb-3">
+                      <SunDim className="size-4.5 text-amber-500" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Light Mode</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Classic slate white</span>
+                  </button>
+
+                  {/* Dark theme choice */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isDark && onToggleTheme) onToggleTheme();
+                    }}
+                    className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
+                      isDark
+                        ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20 ring-2 ring-blue-500/20"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <div className="size-8 rounded-lg bg-slate-850 dark:bg-slate-950 border border-slate-700 flex items-center justify-center mb-3">
+                      <MoonStar className="size-4.5 text-blue-450" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Dark Mode</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Cosmic eye-safe dark</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* MEMBER ROSTER STATUS OVERVIEW CARD */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+              <div className="bg-slate-900 dark:bg-slate-950 px-6 py-4 flex items-center gap-2 text-white border-b border-slate-100 dark:border-slate-800">
+                <Info className="size-4 text-blue-400" />
+                <h3 className="font-display text-sm font-bold uppercase tracking-wider">Clearance & Status</h3>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Security Clearance</span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-350 capitalize border border-slate-200 dark:border-slate-705">
+                    {currentUser.role}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Active Gmail Account</span>
+                  <span className="text-xs font-mono text-slate-650 dark:text-slate-300 truncate max-w-[170px]" title={currentUser.email}>
+                    {currentUser.email}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT SIDE: Profile Detail Formulation Form Cards (7 cols) */}
+          <div className="lg:col-span-7">
+            
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+              <div className="bg-slate-900 dark:bg-slate-950 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <User className="size-4 text-blue-400" />
+                  <h3 className="font-display text-sm font-bold uppercase tracking-wider">Calibration of Personal Profile</h3>
+                </div>
+                {savingPref && (
+                  <div className="size-4 border-2 border-slate-205 border-t-white rounded-full animate-spin" />
+                )}
+              </div>
+
+              <form onSubmit={handleSavePref} className="p-6 space-y-6">
+                
+                {prefError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 text-rose-800 dark:text-rose-300 text-xs rounded-xl flex items-center gap-2">
+                    <AlertCircle className="size-4 text-rose-600 shrink-0" />
+                    <span className="font-medium">{prefError}</span>
+                  </div>
+                )}
+
+                {prefSuccess && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-xs rounded-xl flex items-center gap-2">
+                    <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                    <span className="font-medium">{prefSuccess}</span>
+                  </div>
+                )}
+
+                {/* Avatar Display & Input URL */}
+                <div className="flex flex-col sm:flex-row items-center gap-5 p-4 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-slate-200 dark:border-slate-800/60 animate-fade-in">
+                  <div className="relative shrink-0">
+                    <div className="size-16 rounded-xl overflow-hidden border-2 border-slate-200 dark:border-slate-755 bg-white dark:bg-slate-800 shadow-xs flex items-center justify-center">
+                      {prefAvatarUrl ? (
+                        <img 
+                          src={prefAvatarUrl} 
+                          alt="Avatar Visual" 
+                          className="size-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="text-center p-1 text-[8px] text-slate-400 uppercase">
+                          No Photo
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 space-y-2 text-center sm:text-left w-full">
+                    <span className="block text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500 tracking-wider">Custom Avatar Identifier</span>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        placeholder="Avatar SVG URL or Seed"
+                        className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-805 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-hidden text-slate-800 dark:text-slate-250 font-medium"
+                        value={prefAvatarUrl}
+                        onChange={(e) => setPrefAvatarUrl(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const seed = prefDisplayName.trim() || String(Math.floor(Math.random() * 1000));
+                          setPrefAvatarUrl(`https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(seed)}`);
+                        }}
+                        className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-705 text-slate-700 dark:text-slate-200 text-[10px] font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                      >
+                        Generate Pixel-Art Seed
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Elements Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">Profile Display Name <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Your full name"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 rounded-xl px-3.5 py-2.5 text-xs outline-hidden font-medium text-slate-800 dark:text-slate-100 transition-all"
+                      value={prefDisplayName}
+                      onChange={(e) => setPrefDisplayName(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">📞 Contact phone number</label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. +1 (555) 0192-231"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 rounded-xl px-3.5 py-2.5 text-xs outline-hidden font-mono text-slate-800 dark:text-slate-100 transition-all"
+                      value={prefPhone}
+                      onChange={(e) => setPrefPhone(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">🎂 Birthday (Optional)</label>
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 rounded-xl px-3.5 py-2.5 text-xs outline-hidden text-slate-800 dark:text-slate-100 transition-all cursor-pointer"
+                      value={prefBirthday}
+                      onChange={(e) => setPrefBirthday(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">Access Rank Clearance Level</label>
+                    <input
+                      type="text"
+                      disabled
+                      className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-500 dark:text-slate-550 font-mono select-none cursor-not-allowed uppercase font-bold tracking-wide"
+                      value={`${currentUser.role || "member"} profile clear`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3">
+                  <button
+                    type="submit"
+                    disabled={savingPref}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-755 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    {savingPref ? "Updating..." : "Save Profile Preferences"}
+                  </button>
+                </div>
+
+              </form>
+            </div>
+
+          </div>
+
         </div>
       )}
 
@@ -749,6 +1448,42 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
               >
                 <ShieldAlert className="size-3.5" />
                 Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purge Audit History Confirmation Modal */}
+      {showClearLogsConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setShowClearLogsConfirm(false)}
+          ></div>
+          <div className="relative bg-white border border-slate-200 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6 text-left">
+            <div className="p-3 bg-rose-50 rounded-2xl w-fit text-rose-500 mb-4 animate-pulse">
+              <ShieldOff className="size-5" />
+            </div>
+            <h3 className="text-[17px] font-black text-slate-900 mb-2">Purge Security Audit logs?</h3>
+            <p className="text-[13px] font-medium text-slate-500 mb-6 leading-relaxed">
+              Are you sure? This will wipe out all past administrative records of user overrides, logins, classifications, and system edits from active tracking storage. <strong className="text-red-500">This action is audited and irreversible.</strong>
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowClearLogsConfirm(false)}
+                className="flex-1 px-4 py-2 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                No, Keep Logs
+              </button>
+              <button
+                type="button"
+                onClick={handleClearLogs}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-transparent shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="size-3.5" />
+                Yes, Purge Trail
               </button>
             </div>
           </div>

@@ -17,7 +17,7 @@ export interface UserProfile {
   lastActiveAt?: string;
 }
 
-export type ProjectStatus = "Planning" | "Fabricating" | "Testing" | "Finished";
+export type ProjectStatus = "Planning" | "Fabricating" | "Testing" | "Finished" | "Continuous";
 
 export interface BudgetItem {
   id: string;
@@ -32,6 +32,15 @@ export interface SponsorFunding {
   sponsorName: string;
   amount: number;
   notes?: string;
+  createdAt: string;
+}
+
+export interface MemberContribution {
+  id: string;
+  memberId: string;
+  amount: number;
+  notes?: string;
+  type: "reimbursable" | "donation";
   createdAt: string;
 }
 
@@ -56,6 +65,7 @@ export interface Project {
   memberCostSplits?: { [userId: string]: number };
   budgetItems?: BudgetItem[];
   sponsorFundings?: SponsorFunding[];
+  memberContributions?: MemberContribution[];
 }
 
 export interface ProjectLog {
@@ -103,7 +113,7 @@ export interface Idea {
   id: string;
   title: string;
   description: string;
-  category: string;
+  category?: string;
   createdBy: string;
   creatorName: string;
   creatorAvatar: string;
@@ -126,4 +136,15 @@ export interface AppNotification {
   linkId?: string; // e.g., idea id or project id
   readBy: string[]; // array of userIds who have read it
 }
+
+export interface AdminLog {
+  id: string;
+  action: string;
+  details: string;
+  performedBy: string;
+  performedByName: string;
+  performedByEmail: string;
+  createdAt: string;
+}
+
 

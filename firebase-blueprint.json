@@ -26,7 +26,7 @@
         "id": { "type": "string" },
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "status": { "type": "string", "enum": ["Planning", "Fabricating", "Testing", "Finished"] },
+        "status": { "type": "string", "enum": ["Planning", "Fabricating", "Testing", "Finished", "Continuous"] },
         "leaderId": { "type": "string" },
         "leaderName": { "type": "string" },
         "memberIds": { "type": "array", "description": "User IDs assigned to the project" },

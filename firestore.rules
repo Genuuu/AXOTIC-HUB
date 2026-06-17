@@ -135,5 +135,12 @@ service cloud.firestore {
       allow update: if isVerifiedMember();
       allow delete: if isVerifiedAdmin() || (isSignedIn() && request.auth.uid == resource.data.createdBy);
     }
+
+    match /admin_logs/{logId} {
+      allow read: if isVerifiedAdmin();
+      allow create: if isVerifiedAdmin();
+      allow update: if false; // Logs are immutable, write-once append-only
+      allow delete: if isVerifiedAdmin();
+    }
   }
 }

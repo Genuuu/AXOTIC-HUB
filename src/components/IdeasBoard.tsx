@@ -28,7 +28,8 @@ import {
   Flame,
   ArrowRight,
   MessageCircle,
-  Send
+  Send,
+  Edit
 } from "lucide-react";
 import { UserProfile, Idea, IdeaStatus, Project, IdeaComment } from "../types";
 
@@ -66,7 +67,6 @@ interface IdeasBoardProps {
 export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: IdeasBoardProps) {
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [sortBy, setSortBy] = useState<"votes" | "latest">("votes");
   
@@ -74,8 +74,15 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const [newCategory, setNewCategory] = useState("General");
+  const [newStatus, setNewStatus] = useState<IdeaStatus>("Pending");
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit Idea State
+  const [ideaToEdit, setIdeaToEdit] = useState<Idea | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editStatus, setEditStatus] = useState<IdeaStatus>("Pending");
+  const [updating, setUpdating] = useState(false);
   
   // Comments state
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
@@ -101,7 +108,6 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
               id: "idea-1",
               title: "Autonomous Mecanum Intake System v2",
               description: "A redesigned front intake module utilizing highly-compliant silicone rollers coupled to a high-reduction brushless motor to vacuum up gaming elements fast. This will prevent high friction and lower element jamming.",
-              category: "Mechanical Design",
               createdBy: "mock-bob",
               creatorName: "Bob Axel",
               creatorAvatar: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Bob",
@@ -115,7 +121,6 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
               id: "idea-2",
               title: "Computer Vision Tag Localization Node",
               description: "Integrating AprilTag visual tracking algorithms onto an onboard coprocessor like Raspberry Pi 5 to estimate millimeters-precise coordinate points relative to obstacles. This will make autonomous routines far more consistent.",
-              category: "Software / AI",
               createdBy: "mock-sarah",
               creatorName: "Sarah Connor",
               creatorAvatar: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Sarah",
@@ -129,7 +134,6 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
               id: "idea-3",
               title: "High-Impedance Power Management Shield",
               description: "Custom PCB with high isolation buffers, inline current-shunts, and telemetry modules transmitting battery telemetry to the driver station instantly over serial.",
-              category: "Electronics & PCB",
               createdBy: "mock-genu",
               creatorName: "Genu Kakisara (Lead)",
               creatorAvatar: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Genu",
@@ -183,7 +187,6 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
     const freshIdeaPayload = {
       title: newTitle.trim(),
       description: newDesc.trim(),
-      category: newCategory,
       createdBy: currentUser.uid,
       creatorName: currentUser.displayName,
       creatorAvatar: currentUser.avatarUrl,
@@ -191,7 +194,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
       updatedAt: timestamp,
       votes: 1,
       votedIds: [currentUser.uid],
-      status: "Pending" as IdeaStatus
+      status: newStatus
     };
 
     try {
@@ -214,12 +217,52 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
 
       setNewTitle("");
       setNewDesc("");
-      setNewCategory("Mechanical Design");
+      setNewStatus("Pending");
       setIsCreateOpen(false);
     } catch (err) {
       console.error("Failed to publish concept", err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUpdateIdea = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ideaToEdit || !editTitle.trim() || !editDesc.trim()) return;
+
+    setUpdating(true);
+    const timestamp = new Date().toISOString();
+
+    try {
+      if (currentUser.isOfflineMock) {
+        const mapped = ideas.map((item) =>
+          item.id === ideaToEdit.id
+            ? { 
+                ...item, 
+                title: editTitle.trim(), 
+                description: editDesc.trim(), 
+                status: editStatus,
+                updatedAt: timestamp 
+              }
+            : item
+        );
+        saveMockIdeasToStore(mapped);
+        createGlobalNotification("idea_created", `Idea edited: ${editTitle.trim()}`, ideaToEdit.id, currentUser);
+      } else {
+        const docRef = doc(db, "ideas", ideaToEdit.id);
+        await updateDoc(docRef, {
+          title: editTitle.trim(),
+          description: editDesc.trim(),
+          status: editStatus,
+          updatedAt: serverTimestamp()
+        });
+        createGlobalNotification("idea_created", `Idea edited: ${editTitle.trim()}`, ideaToEdit.id, currentUser);
+      }
+      setIdeaToEdit(null);
+    } catch (err) {
+      console.error("Failed to update concept", err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -356,10 +399,9 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                           idea.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           idea.creatorName.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesCategory = selectedCategory === "All" || idea.category === selectedCategory;
     const matchesStatus = statusFilter === "All" || idea.status === statusFilter;
 
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesStatus;
   });
 
   // Sort ideas
@@ -384,31 +426,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
     }
   };
 
-  const getCategoryTheme = (category: string) => {
-    switch (category) {
-      case "Mechanical Design":
-        return "bg-slate-100 dark:bg-slate-800 dark:text-slate-200 text-slate-700 border-slate-200";
-      case "Software / AI":
-        return "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-900";
-      case "Electronics & PCB":
-        return "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/30 dark:text-cyan-400 dark:border-cyan-900";
-      case "Public Relations & PR":
-        return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900";
-      case "Event & Strategy":
-        return "bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/30 dark:text-pink-400 dark:border-pink-900";
-      default:
-        return "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800";
-    }
-  };
 
-  const categories = [
-    "Mechanical Design",
-    "Software / AI",
-    "Electronics & PCB",
-    "Public Relations & PR",
-    "Event & Strategy",
-    "Other Concepts"
-  ];
 
   return (
     <div className="space-y-6 text-left">
@@ -476,11 +494,10 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-sm mx-auto">
             Bring your engineers to brainstorm, build CAD, develop software paradigms, and spawn custom mechanical solutions right above!
           </p>
-          {(searchQuery || selectedCategory !== "All" || statusFilter !== "All") && (
+          {(searchQuery || statusFilter !== "All") && (
             <button
               onClick={() => {
                 setSearchQuery("");
-                setSelectedCategory("All");
                 setStatusFilter("All");
               }}
               className="mt-4 px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
@@ -502,7 +519,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                 {/* Header */}
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {getStatusBadge(idea.status)}
                     </div>
                   </div>
@@ -588,6 +605,24 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                           <Sparkles className="size-3" /> Promote
                         </button>
                       )
+                    )}
+
+                    {/* Author edit concept action */}
+                    {idea.createdBy === currentUser.uid && idea.status !== "Promoted" && (
+                      <button
+                        type="button"
+                        id={`edit-idea-btn-${idea.id}`}
+                        onClick={() => {
+                          setIdeaToEdit(idea);
+                          setEditTitle(idea.title);
+                          setEditDesc(idea.description);
+                          setEditStatus(idea.status || "Pending");
+                        }}
+                        className="p-1 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                        title="Edit Concept"
+                      >
+                        <Edit className="size-3.5" />
+                      </button>
                     )}
 
                     {/* Author delete retraction action */}
@@ -700,6 +735,19 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                 />
               </div>
 
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Progression Status</label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value as IdeaStatus)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:text-white rounded-xl px-3.5 py-2.5 text-xs outline-hidden font-semibold cursor-pointer"
+                >
+                  <option value="Pending">💡 Pending Review</option>
+                  <option value="Discussing">💬 Actionable Discussion</option>
+                  <option value="Promoted">🚀 Promoted to Build</option>
+                </select>
+              </div>
+
 
 
               <div>
@@ -728,6 +776,92 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-extrabold text-xs rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5"
                 >
                   {submitting ? "Publishing..." : "Submit Concept"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT DIALOG MODAL PANEL */}
+      {ideaToEdit && (
+        <div id="edit-idea-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 dark:bg-slate-950/80 backdrop-blur-xs animate-fade-in text-slate-800">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden text-left">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-xl">
+                  <Lightbulb className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wide">
+                    Edit Proposed Concept
+                  </h3>
+                  <p className="text-[10px] text-slate-450 dark:text-slate-400 mt-0.5">
+                    Revise the title, strategy, mechanical elements, or technical specs.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIdeaToEdit(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs font-bold font-sans cursor-pointer h-6 w-6 flex items-center justify-center rounded-lg bg-slate-105/50 border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateIdea} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Concept / Robot Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Swerve Drive Pathing Engine or Sponsor Pizza Night"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:text-white rounded-xl px-3.5 py-2.5 text-xs outline-hidden font-medium"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Progression Status</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as IdeaStatus)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:text-white rounded-xl px-3.5 py-2.5 text-xs outline-hidden font-semibold cursor-pointer"
+                >
+                  <option value="Pending">💡 Pending Review</option>
+                  <option value="Discussing">💬 Actionable Discussion</option>
+                  <option value="Promoted">🚀 Promoted to Build</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Description & Specifications</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="State the objective, potential cost, required hardware modules, and how this accelerates the AXOTIC build stack..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:text-white rounded-xl p-3.5 text-xs outline-hidden font-medium font-sans leading-relaxed resize-none"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-150/50 dark:border-slate-850">
+                <button
+                  type="button"
+                  onClick={() => setIdeaToEdit(null)}
+                  className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updating}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-extrabold text-xs rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  {updating ? "Saving Changes..." : "Save Concept"}
                 </button>
               </div>
             </form>
