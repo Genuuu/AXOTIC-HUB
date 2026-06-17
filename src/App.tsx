@@ -31,7 +31,6 @@ import {
   Bell
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
-import { checkIsTodayBirthday } from "./utils";
 import logoUrl from "../Images/Logo.png";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -44,11 +43,9 @@ import InventoryManager from "./components/InventoryManager";
 import MemberRoster from "./components/MemberRoster";
 import AdminSettings from "./components/AdminSettings";
 import IdeasBoard from "./components/IdeasBoard";
-import BirthdaySurprise from "./components/BirthdaySurprise";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [isBirthdayClaimed, setIsBirthdayClaimed] = useState(false);
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -73,17 +70,6 @@ export default function App() {
       localStorage.setItem("axotic_theme", "light");
     }
   }, [isDark]);
-
-  useEffect(() => {
-    if (currentUser) {
-      const isBday = checkIsTodayBirthday(currentUser.birthday);
-      const todayStr = new Date().toISOString().split("T")[0];
-      const claimVal = localStorage.getItem(`axotic_bday_claimed_${todayStr}_${currentUser.uid}`) === "true";
-      setIsBirthdayClaimed(claimVal && isBday);
-    } else {
-      setIsBirthdayClaimed(false);
-    }
-  }, [currentUser]);
 
   // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas"
   const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas">("home");
@@ -866,14 +852,6 @@ export default function App() {
                       <span className="text-xs font-bold text-white truncate block max-w-[100px]" title={currentUser.displayName}>
                         {currentUser.displayName}
                       </span>
-                      {isBirthdayClaimed && (
-                        <span 
-                          className="inline-flex items-center justify-center text-xs animate-bounce shrink-0 select-none cursor-help" 
-                          title="VIP Birthday Gold Specialist Badge active!"
-                        >
-                          🏆
-                        </span>
-                      )}
                     </div>
                     {currentUser.role === "admin" ? (
                       <span className="bg-blue-500/15 text-blue-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-500/30 font-mono tracking-wider shrink-0">
@@ -1086,7 +1064,6 @@ export default function App() {
                       }
                     }}
                     onOpenEditProfile={handleOpenEditProfile}
-                    isBirthdayClaimed={isBirthdayClaimed}
                   />
                 )}
                 {activeTab === "projects" && (
@@ -1381,15 +1358,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {currentUser && (
-        <BirthdaySurprise 
-          currentUser={currentUser} 
-          isDark={isDark} 
-          onClaim={() => setIsBirthdayClaimed(true)} 
-        />
-      )}
-
     </div>
   );
 }

@@ -31,10 +31,9 @@ interface HomeDashboardProps {
   projectsList: Project[];
   onNavigate: (tab: "projects" | "inventory" | "roster" | "settings", projectId?: string) => void;
   onOpenEditProfile: () => void;
-  isBirthdayClaimed?: boolean;
 }
 
-export default function HomeDashboard({ currentUser, roster, projectsList, onNavigate, onOpenEditProfile, isBirthdayClaimed }: HomeDashboardProps) {
+export default function HomeDashboard({ currentUser, roster, projectsList, onNavigate, onOpenEditProfile }: HomeDashboardProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [allLogs, setAllLogs] = useState<ProjectLog[]>([]);
 
@@ -184,14 +183,6 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
               </div>
               <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white mt-1.5 font-display flex items-center gap-2 flex-wrap">
                 <span>{getGreeting()}, {currentUser.displayName}</span>
-                {isBirthdayClaimed && (
-                  <span 
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/30 text-[9px] font-bold uppercase tracking-widest leading-none select-none animate-pulse"
-                    title="Golden Birthday Badge Unlocked!"
-                  >
-                    🏆 GOLD BADGE ACTIVE
-                  </span>
-                )}
               </h2>
               <p className="text-xs text-slate-300 mt-1 max-w-xl font-sans leading-relaxed">
                 <span className="text-slate-400 font-mono">{currentUser.email}</span>
@@ -207,37 +198,6 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           </button>
         </div>
       </motion.div>
-
-      {/* Birthday Celebrating Banner Card */}
-      {isBirthdayClaimed && (
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-5.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-pink-500/5 to-purple-600/10 border border-amber-500/20 shadow-sm relative overflow-hidden flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between"
-        >
-          {/* Ambient visual backlights */}
-          <div className="absolute right-[-20%] top-[-50%] size-72 rounded-full bg-amber-500/20 blur-3xl pointer-events-none" />
-          <div className="absolute left-[-20%] bottom-[-50%] size-72 rounded-full bg-purple-500/15 blur-3xl pointer-events-none" />
-
-          <div className="flex gap-4 items-center">
-            <div className="size-14 rounded-2xl bg-amber-500/15 flex items-center justify-center border border-amber-400/30 text-amber-500 shrink-0 select-none animate-bounce" style={{ animationDuration: "2.5s" }}>
-              🏆
-            </div>
-            <div className="space-y-1">
-              <span className="text-[10px] font-black tracking-widest text-amber-500 uppercase block">SPECIAL CELEBRATION ACTIVE</span>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-amber-200">
-                Happy Birthday! You have claimed your Gold Credential Badge!
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Your status verified decoration is now pinned persistently on your sidebar profile widgets for standard-level systems respect!
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/30 text-[9.5px] font-mono font-bold text-amber-600 dark:text-amber-400 select-none">
-            ⭐ Clearance Active Today
-          </div>
-        </motion.div>
-      )}
 
       {/* 2. CORE STATS MULTI-CARD GRID */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
