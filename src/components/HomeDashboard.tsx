@@ -61,7 +61,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
         });
         setInventory(items);
       }, (err) => {
-        console.warn("Could not query inventory real-time for home metrics.", err);
+        console.warn("Could not query inventory real-time for home metrics.", err instanceof Error ? err.message : String(err));
       });
       return () => unsubscribe();
     }
@@ -121,7 +121,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           logsMap[p.id] = projectLogsList;
           renderAggregated();
         }, (err) => {
-          console.warn(`Firestore log stream skipped for project ${p.id}`, err);
+          console.warn(`Firestore log stream skipped for project ${p.id}`, err instanceof Error ? err.message : String(err));
         });
         unsubscribers.push(unsub);
       });

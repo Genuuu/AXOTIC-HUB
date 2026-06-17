@@ -36,7 +36,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
       await processUserAccess(user.uid, email, user.displayName, user.photoURL);
     } catch (err: any) {
-      console.error("Google Auth Error", err);
+      console.error("Google Auth Error", err instanceof Error ? err.message : String(err));
       if (err.code === "auth/unauthorized-domain") {
         setErrorText(
           `Unauthorized Domain: Please add "${window.location.hostname}" to the Authorized Domains list in your Firebase Console -> Authentication -> Settings -> Authorized domains.`
@@ -122,7 +122,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         try {
           await deleteDoc(doc(db, "users", matchedId));
         } catch (delErr) {
-          console.warn("Could not delete legacy temporary user doc", delErr);
+          console.warn("Could not delete legacy temporary user doc", delErr instanceof Error ? delErr.message : String(delErr));
         }
       } else {
         profile = { uid: matchedId, ...matchedData } as UserProfile;
@@ -136,7 +136,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       try {
         await signOut(auth);
       } catch (err) {
-        console.warn("Sign out err", err);
+        console.warn("Sign out err", err instanceof Error ? err.message : String(err));
       }
       setErrorText(`Access Denied: The Google Account "${email}" is not registered on this system. Please contact an Administrator to have your account added first.`);
     }
@@ -201,7 +201,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         setErrorText(`Access Denied: The Google email "${email}" is not registered in the system. An administrator must onboard you first.`);
       }
     } catch (err: any) {
-      console.error("Fallback auth error", err);
+      console.error("Fallback auth error", err instanceof Error ? err.message : String(err));
       setErrorText("Database communication error. Please try again.");
     } finally {
       setLoading(false);

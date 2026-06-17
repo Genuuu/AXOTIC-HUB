@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
+import { getFirestore, doc, getDocFromServer, addDoc, collection } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
@@ -10,6 +10,45 @@ export const db = (firebaseConfig as any).firestoreDatabaseId
   
 export const auth = getAuth();
 export const googleProvider = new GoogleAuthProvider(); // Added the provider here
+
+export async function createGlobalNotification(
+  type: "idea_created" | "project_created" | "comment_added",
+  message: string,
+  linkId: string,
+  currentUser: any
+) {
+  if (currentUser.isOfflineMock) {
+    const local = localStorage.getItem("axotic_mock_notifications");
+    let currentNotifs: any[] = local ? JSON.parse(local) : [];
+    const newNotif = {
+      id: `mock-notif-${Date.now()}`,
+      message,
+      createdBy: currentUser.uid,
+      creatorName: currentUser.displayName,
+      createdAt: new Date().toISOString(),
+      type,
+      linkId,
+      readBy: []
+    };
+    localStorage.setItem("axotic_mock_notifications", JSON.stringify([newNotif, ...currentNotifs]));
+    window.dispatchEvent(new Event("axotic_db_update"));
+    return;
+  }
+  
+  try {
+    await addDoc(collection(db, "notifications"), {
+      message,
+      createdBy: currentUser.uid,
+      creatorName: currentUser.displayName,
+      createdAt: new Date().toISOString(),
+      type,
+      linkId,
+      readBy: []
+    });
+  } catch (err) {
+    console.warn("Could not create notification", err instanceof Error ? err.message : String(err));
+  }
+}
 
 export enum OperationType {
   CREATE = "create",
@@ -55,7 +94,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path,
   };
-  console.error("Firestore Action Error Logged:", JSON.stringify(errInfo));
+  console.error("Firestore Action Error Logged:", errInfo);
 }
 
 export async function testConnectionObj() {

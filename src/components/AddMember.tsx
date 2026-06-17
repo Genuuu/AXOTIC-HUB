@@ -167,7 +167,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
           createdAt: new Date().toISOString()
         });
       } catch (mailErr) {
-        console.warn("Failed to write to Trigger Email Firestore subcollection:", mailErr);
+        console.warn("Failed to write to Trigger Email Firestore subcollection:", mailErr instanceof Error ? mailErr.message : String(mailErr));
       }
 
       setSuccessMsg(`Successfully registered ${displayName.trim()} to live Firestore database! Whitelist access notification dispatched to: ${email.trim().toLowerCase()}.`);

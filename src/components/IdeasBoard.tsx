@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db } from "../firebase";
+import { db, createGlobalNotification } from "../firebase";
 import { 
   collection, 
   onSnapshot, 
@@ -9,7 +9,8 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion
 } from "firebase/firestore";
 import { 
   Lightbulb, 
@@ -25,9 +26,11 @@ import {
   Tag,
   Filter,
   Flame,
-  ArrowRight
+  ArrowRight,
+  MessageCircle,
+  Send
 } from "lucide-react";
-import { UserProfile, Idea, IdeaStatus, Project } from "../types";
+import { UserProfile, Idea, IdeaStatus, Project, IdeaComment } from "../types";
 
 // Safe helpers for Firestore Timestamps and local strings
 const formatDate = (val: any) => {
@@ -73,6 +76,13 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
   const [newDesc, setNewDesc] = useState("");
   const [newCategory, setNewCategory] = useState("General");
   const [submitting, setSubmitting] = useState(false);
+  
+  // Comments state
+  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+  const [newCommentTexts, setNewCommentTexts] = useState<Record<string, string>>({});
+
+  const [ideaToDelete, setIdeaToDelete] = useState<string | null>(null);
+  const [ideaToPromote, setIdeaToPromote] = useState<Idea | null>(null);
 
   // Firestore or Sandbox state Sync
   useEffect(() => {
@@ -150,7 +160,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
       });
       setIdeas(items);
     }, (err) => {
-      console.error("Failed to fetch ideas real-time.", err);
+      console.error("Failed to fetch ideas real-time.", err instanceof Error ? err.message : String(err));
     });
 
     return () => unsubscribe();
@@ -186,17 +196,20 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
 
     try {
       if (currentUser.isOfflineMock) {
+        const id = `idea-mock-${Date.now()}`;
         const expandedList = [
-          { id: `idea-mock-${Date.now()}`, ...freshIdeaPayload },
+          { id, ...freshIdeaPayload },
           ...ideas
         ];
         saveMockIdeasToStore(expandedList);
+        createGlobalNotification("idea_created", `New idea proposed: ${freshIdeaPayload.title}`, id, currentUser);
       } else {
-        await addDoc(collection(db, "ideas"), {
+        const docRef = await addDoc(collection(db, "ideas"), {
           ...freshIdeaPayload,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
+        createGlobalNotification("idea_created", `New idea proposed: ${freshIdeaPayload.title}`, docRef.id, currentUser);
       }
 
       setNewTitle("");
@@ -204,7 +217,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
       setNewCategory("Mechanical Design");
       setIsCreateOpen(false);
     } catch (err) {
-      console.error("Failed to publish concept", err);
+      console.error("Failed to publish concept", err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
@@ -241,12 +254,14 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
         });
       }
     } catch (err) {
-      console.warn("Failed to register support upvote", err);
+      console.warn("Failed to register support upvote", err instanceof Error ? err.message : String(err));
     }
   };
 
-  const handleDeleteIdea = async (ideaId: string) => {
-    if (!window.confirm("Are you sure you want to retract this concept?")) return;
+  const handleConfirmDeleteIdea = async () => {
+    if (!ideaToDelete) return;
+    const ideaId = ideaToDelete;
+    setIdeaToDelete(null);
 
     try {
       if (currentUser.isOfflineMock) {
@@ -256,12 +271,59 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
         await deleteDoc(doc(db, "ideas", ideaId));
       }
     } catch (err) {
-      console.error("Failed to delete concept", err);
+      console.error("Failed to delete concept", err instanceof Error ? err.message : String(err));
     }
   };
 
-  const handlePromote = async (idea: Idea) => {
-    if (!window.confirm(`Reviewing: "${idea.title}". Are you ready to promote this brainwave idea into an active workspace Project card?`)) return;
+  const toggleComments = (ideaId: string) => {
+    setExpandedComments((prev) => ({
+      ...prev,
+      [ideaId]: !prev[ideaId]
+    }));
+  };
+
+  const submitComment = async (ideaId: string) => {
+    const text = newCommentTexts[ideaId]?.trim();
+    if (!text) return;
+
+    const newComment: IdeaComment = {
+      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      authorId: currentUser.uid,
+      authorName: currentUser.displayName,
+      authorAvatar: currentUser.avatarUrl,
+      content: text,
+      createdAt: new Date().toISOString()
+    };
+
+    setNewCommentTexts((prev) => ({ ...prev, [ideaId]: "" }));
+
+    try {
+      const ideaTitle = ideas.find(i => i.id === ideaId)?.title || "an idea";
+      if (currentUser.isOfflineMock) {
+        const mapped = ideas.map((item) =>
+          item.id === ideaId
+            ? { ...item, comments: [...(item.comments || []), newComment], updatedAt: new Date().toISOString() }
+            : item
+        );
+        saveMockIdeasToStore(mapped);
+        createGlobalNotification("comment_added", `New comment on: ${ideaTitle}`, ideaId, currentUser);
+      } else {
+        const docRef = doc(db, "ideas", ideaId);
+        await updateDoc(docRef, {
+          comments: arrayUnion(newComment),
+          updatedAt: serverTimestamp()
+        });
+        createGlobalNotification("comment_added", `New comment on: ${ideaTitle}`, ideaId, currentUser);
+      }
+    } catch (err) {
+      console.warn("Failed to submit comment", err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleConfirmPromote = async () => {
+    if (!ideaToPromote) return;
+    const idea = ideaToPromote;
+    setIdeaToPromote(null);
 
     try {
       // 1. Fire upstream parent call to create actual Project
@@ -284,7 +346,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
         });
       }
     } catch (err) {
-      console.error("Failed to promote idea to active build status", err);
+      console.error("Failed to promote idea to active build status", err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -494,6 +556,21 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                       <span>{idea.votes}</span>
                     </button>
 
+                    {/* Comments Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => toggleComments(idea.id)}
+                      className={`h-7 px-2.5 rounded-lg text-xs font-semibold cursor-pointer border flex items-center gap-1.5 transition-all outline-hidden active:scale-95 ${
+                        expandedComments[idea.id]
+                          ? "bg-slate-100 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                          : "bg-white border-slate-200 text-slate-600 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                      title="View Discussions"
+                    >
+                      <MessageCircle className="size-3.5" />
+                      <span>{idea.comments?.length || 0}</span>
+                    </button>
+
                     {/* Promoted State Indicator or Promote Action Button */}
                     {idea.status === "Promoted" ? (
                       <span className="h-7 px-2.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-150 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900 text-[10px] font-bold flex items-center gap-1 select-none">
@@ -504,7 +581,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                         <button
                           type="button"
                           id={`promote-btn-${idea.id}`}
-                          onClick={() => handlePromote(idea)}
+                          onClick={() => setIdeaToPromote(idea)}
                           className="h-7 px-3 bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-[10px] font-bold rounded-lg flex items-center gap-1 shadow-xs cursor-pointer transition-all border-none"
                           title="Instantly create an active building project template from this concept blueprint!"
                         >
@@ -518,7 +595,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                       <button
                         type="button"
                         id={`delete-idea-btn-${idea.id}`}
-                        onClick={() => handleDeleteIdea(idea.id)}
+                        onClick={() => setIdeaToDelete(idea.id)}
                         className="p-1 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                         title="Retract/Delete Concept"
                       >
@@ -528,6 +605,55 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                   </div>
 
                 </div>
+
+                {/* Expanded Comments Panel */}
+                {expandedComments[idea.id] && (
+                  <div className="bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800/80 p-4 max-h-[300px] overflow-y-auto w-full flex flex-col pointer-events-auto">
+                    <div className="space-y-4 flex-1 mb-4">
+                      {(!idea.comments || idea.comments.length === 0) ? (
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 italic text-center w-full">No comments yet. Start the discussion!</p>
+                      ) : (
+                        idea.comments.map((comment) => (
+                          <div key={comment.id} className="flex gap-2">
+                            <img
+                              src={comment.authorAvatar || "https://api.dicebear.com/7.x/pixel-art/svg?seed=" + encodeURIComponent(comment.authorName)}
+                              alt={comment.authorName}
+                              referrerPolicy="no-referrer"
+                              className="size-5 rounded-md border border-slate-200 dark:border-slate-700 flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">{comment.authorName}</span>
+                                <span className="text-[9px] text-slate-400 whitespace-nowrap">{formatDate(comment.createdAt)}</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap break-words">{comment.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    
+                    <div className="relative mt-auto">
+                      <input 
+                        type="text"
+                        placeholder="Add a comment..."
+                        className="w-full bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg pl-3 pr-10 py-2 text-xs outline-hidden dark:text-slate-300 focus:border-blue-500 transition-colors"
+                        value={newCommentTexts[idea.id] || ""}
+                        onChange={(e) => setNewCommentTexts(prev => ({ ...prev, [idea.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitComment(idea.id);
+                        }}
+                      />
+                      <button
+                        onClick={() => submitComment(idea.id)}
+                        disabled={!newCommentTexts[idea.id]?.trim()}
+                        className="absolute right-1 top-1 p-1 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-300 disabled:text-slate-500 rounded-md transition-colors"
+                      >
+                        <Send className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -605,6 +731,71 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {ideaToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setIdeaToDelete(null)}
+          ></div>
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6">
+            <h3 className="text-[17px] font-black text-slate-900 dark:text-white mb-2">Retract Concept?</h3>
+            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+              Are you sure you want to delete this idea? This action cannot be undone.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIdeaToDelete(null)}
+                className="flex-1 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteIdea}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-transparent shadow-sm"
+              >
+                Retract
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Promote Confirmation Modal */}
+      {ideaToPromote && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setIdeaToPromote(null)}
+          ></div>
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6">
+            <h3 className="text-[17px] font-black text-slate-900 dark:text-white mb-2">Promote Idea</h3>
+            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+              Reviewing: "{ideaToPromote.title}". Are you ready to promote this brainwave idea into an active workspace Project card?
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIdeaToPromote(null)}
+                className="flex-1 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPromote}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-transparent shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="size-3.5" />
+                Promote
+              </button>
+            </div>
           </div>
         </div>
       )}

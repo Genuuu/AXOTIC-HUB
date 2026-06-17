@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   db, 
   handleFirestoreError, 
-  OperationType 
+  OperationType,
+  createGlobalNotification
 } from "../firebase";
 import { 
   collection, 
@@ -65,9 +66,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         } else {
           setProjectTab("ongoing");
         }
-      }
-      if (onClearInitialSelectedProjectId) {
-        onClearInitialSelectedProjectId();
+        if (onClearInitialSelectedProjectId) {
+          onClearInitialSelectedProjectId();
+        }
       }
     }
   }, [initialSelectedProjectId, projects, onClearInitialSelectedProjectId]);
@@ -105,6 +106,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   // Workspace interactions state
   const [newLogContent, setNewLogContent] = useState("");
   const [loading, setLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
   
   // Dedicated sub-views tab state for selected project workspace
   const [workspaceTab, setWorkspaceTab] = useState<"budget" | "subsystems" | "logs">("budget");
@@ -129,6 +131,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [bulkActionSuccess, setBulkActionSuccess] = useState<string | null>(null);
   const [bulkActionError, setBulkActionError] = useState<string | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
   useEffect(() => {
@@ -230,7 +233,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       setBulkActionSuccess(msg);
       setSelectedProjectIds([]);
     } catch (err) {
-      console.error(err);
+      console.error(err instanceof Error ? err.message : String(err));
       setBulkActionError("Failed to perform bulk status update. Verify your permissions.");
     } finally {
       setIsBulkProcessing(false);
@@ -296,7 +299,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       setBulkActionSuccess(`Successfully deleted ${deletedCount} projects.`);
       setSelectedProjectIds([]);
     } catch (err) {
-      console.error(err);
+      console.error(err instanceof Error ? err.message : String(err));
       setBulkActionError("Failed to complete bulk deletion. Verify administrator privileges.");
     } finally {
       setIsBulkProcessing(false);
@@ -537,7 +540,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         setSelectedInventoryItemId("");
         setAllocationQty(1);
       } catch (err) {
-        console.error(err);
+        console.error(err instanceof Error ? err.message : String(err));
       } finally {
         setSubmittingHw(false);
       }
@@ -653,7 +656,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         setClickedHwItem(null);
         setRemoveQty(1);
       } catch (err) {
-        console.error(err);
+        console.error(err instanceof Error ? err.message : String(err));
       } finally {
         setSubmittingHw(false);
       }
@@ -708,7 +711,14 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim()) {
+      setCreateError("Project Title is required.");
+      return;
+    }
+    if (!newDesc.trim()) {
+      setCreateError("Technical Scope Description is required.");
+      return;
+    }
 
     const leaderObj = roster.find((u) => u.uid === newLeaderId) || currentUser;
     const taggedMembers = roster.filter((u) => newMemberIds.includes(u.uid));
@@ -745,6 +755,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       setNewEstimatedCost("");
       setNewCostSplitType("equal");
       setNewMemberCostSplits({});
+      setCreateError("");
     };
 
     if (currentUser.isOfflineMock) {
@@ -758,6 +769,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       };
       localStorage.setItem("axotic_mock_projects", JSON.stringify([newProj, ...currentProjects]));
       window.dispatchEvent(new Event("axotic_db_update"));
+      createGlobalNotification("project_created", `New project spawned: ${newProj.title}`, newProjId, currentUser);
 
       setShowCreateModal(false);
       clearCreateForm();
@@ -766,12 +778,15 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
     }
 
     try {
+      setCreateError("");
       setLoading(true);
-      await addDoc(collection(db, "projects"), payload);
+      const docRef = await addDoc(collection(db, "projects"), payload);
+      createGlobalNotification("project_created", `New project spawned: ${payload.title}`, docRef.id, currentUser);
       setShowCreateModal(false);
       clearCreateForm();
-    } catch (err) {
+    } catch (err: any) {
       handleFirestoreError(err, OperationType.CREATE, "projects");
+      setCreateError("Action Failed. A database policy constraint prevented this modification.");
     } finally {
       setLoading(false);
     }
@@ -1091,9 +1106,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
     }
   };
 
-  if (selectedProject === null) {
-    return (
+  return (
+    <>
       <div id="project-hub-root" className="w-full max-w-7xl mx-auto px-1 py-4 space-y-6">
+        {selectedProject === null ? (
+          <>
         
         {/* Banner Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 pb-5">
@@ -1238,11 +1255,18 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   <h3 className="text-sm font-semibold text-slate-600">
                     {projectTab === "ongoing" ? "No Ongoing Projects" : "No Finished Projects"}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    {projectTab === "ongoing"
-                      ? "Initiative is open to any active logged-in member. Spawn your first project card above!"
-                      : "Projects that are fully constructed and marked as finished reside here."}
-                  </p>
+                  {projectTab === "ongoing" ? (
+                    <button 
+                      onClick={() => setShowCreateModal(true)}
+                      className="text-xs text-blue-500 hover:text-blue-600 hover:underline mt-2 font-medium cursor-pointer"
+                    >
+                      Initiative is open to any active logged-in member. Spawn your first project card here!
+                    </button>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                      Projects that are fully constructed and marked as finished reside here.
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -1323,13 +1347,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
             ))
           )}
         </div>
-      </div>
-    );
-  }
-
-  // Active workstation context
-  return (
-    <div id="project-hub-root" className="w-full max-w-7xl mx-auto px-1 py-4 space-y-6">
+          </>
+        ) : (
+          <>
       
       {/* Dynamic Slide-Over Back Button */}
       <div className="flex flex-col space-y-3">
@@ -2164,6 +2184,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         )}
 
       </div>
+          </>
+        )}
 
 
 
@@ -2182,11 +2204,15 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
             </div>
 
             <form onSubmit={handleCreateProject} className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
+              {createError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-xs font-semibold">
+                  {createError}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Project Title</label>
                 <input
                   type="text"
-                  required
                   className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-lg px-3 py-2 text-sm outline-hidden"
                   placeholder="e.g., v2 Autonomous Arm Chassis"
                   value={newTitle}
@@ -2884,12 +2910,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
               <button
                 type="button"
                 id="bulk-delete-action-btn"
-                onClick={() => {
-                  const confirmDel = window.confirm(`Are you absolutely sure you want to delete ${selectedProjectIds.length} projects? This action cannot be undone.`);
-                  if (confirmDel) {
-                    handleBulkDelete();
-                  }
-                }}
+                onClick={() => setShowBulkDeleteConfirm(true)}
                 disabled={isBulkProcessing}
                 className="px-3.5 py-1.5 bg-red-600/90 hover:bg-red-700 border border-red-500/30 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
               >
@@ -2928,6 +2949,43 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         )}
       </AnimatePresence>
 
+      {/* Bulk Delete Confirm Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setShowBulkDeleteConfirm(false)}
+          ></div>
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6">
+            <h3 className="text-[17px] font-black text-slate-900 dark:text-white mb-2">Delete Multiple Projects?</h3>
+            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+              Are you absolutely sure you want to delete {selectedProjectIds.length} projects? This action cannot be undone.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBulkDeleteConfirm(false);
+                  handleBulkDelete();
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-transparent shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+    </>
   );
 }

@@ -60,6 +60,10 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
   const [returnPeriod, setReturnPeriod] = useState("30 days");
   const [allowPublicVisibility, setAllowPublicVisibility] = useState(true);
 
+  // Confirm states
+  const [categoryToRemove, setCategoryToRemove] = useState<string | null>(null);
+  const [userToDismiss, setUserToDismiss] = useState<UserProfile | null>(null);
+
   // Load Categories list
   useEffect(() => {
     if (currentUser.isOfflineMock) {
@@ -104,7 +108,7 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
           setCategories(Array.from(new Set(list)));
         }
       }, (err) => {
-        console.warn("Could not load Firestore categories stream", err);
+        console.warn("Could not load Firestore categories stream", err instanceof Error ? err.message : String(err));
       });
       return () => unsub();
     }
@@ -141,7 +145,7 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
         });
         setRoster(list);
       }, (err) => {
-        console.warn("Could not load users database", err);
+        console.warn("Could not load users database", err instanceof Error ? err.message : String(err));
       });
       return () => unsub();
     }
@@ -187,9 +191,10 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
   };
 
   // Handle category removal
-  const handleRemoveCategory = async (catName: string) => {
-    const confirmRemove = window.confirm(`Are you sure you want to delete the category "${catName}"? Existing inventory items belonging to this category will not be deleted but they will lose their classification matching.`);
-    if (!confirmRemove) return;
+  const handleConfirmRemoveCategory = async () => {
+    if (!categoryToRemove) return;
+    const catName = categoryToRemove;
+    setCategoryToRemove(null);
 
     setLoading(true);
     setSuccessMsg("");
@@ -274,14 +279,18 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
   };
 
   // Admin dismissal/deletion of user roster profiles
-  const handleDismissUser = async (user: UserProfile) => {
+  const handleDismissUser = (user: UserProfile) => {
     if (user.uid === currentUser.uid) {
-      alert("Self-Mutation Blocked: You cannot dismiss your own administrator session profile.");
+      setErrorMsg("Self-Mutation Blocked: You cannot dismiss your own administrator session profile.");
       return;
     }
+    setUserToDismiss(user);
+  };
 
-    const confirmDismiss = window.confirm(`Permanently dismiss and delete ${user.displayName}'s access profile? WARNING: This action cannot be undone.`);
-    if (!confirmDismiss) return;
+  const handleConfirmDismissUser = async () => {
+    if (!userToDismiss) return;
+    const user = userToDismiss;
+    setUserToDismiss(null);
 
     setLoading(true);
     setErrorMsg("");
@@ -429,7 +438,7 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleRemoveCategory(cat)}
+                        onClick={() => setCategoryToRemove(cat)}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                         title="Delete product category"
                       >
@@ -506,19 +515,6 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
               </div>
 
             </form>
-          </div>
-
-          {/* DIAGNOSTIC INFORMATION */}
-          <div className="bg-slate-100/60 border border-slate-200/50 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center gap-4">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl shrink-0">
-              <Laptop className="size-5" />
-            </div>
-            <div className="space-y-1 text-left">
-              <span className="text-xs font-bold text-slate-800 block">Workspace Cloud Terminal Context</span>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                This administration settings board handles real-time data flow permissions and role bindings. Ensure team policies and categories coordinate with physical lab cabinets for perfect compliance.
-              </p>
-            </div>
           </div>
 
         </div>
@@ -690,6 +686,72 @@ export default function AdminSettings({ currentUser }: AdminSettingsProps) {
       ) : (
         <div className="animate-in fade-in zoom-in-95 duration-200 bg-white border border-slate-200/60 rounded-2xl p-2 sm:p-4 shadow-2xs">
           <AddMember currentUser={currentUser} />
+        </div>
+      )}
+
+      {/* Category Remove Confirmation Modal */}
+      {categoryToRemove && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setCategoryToRemove(null)}
+          ></div>
+          <div className="relative bg-white border border-slate-200 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6">
+            <h3 className="text-[17px] font-black text-slate-900 mb-2">Delete Category?</h3>
+            <p className="text-[13px] font-medium text-slate-500 mb-6 leading-relaxed">
+              Are you sure you want to delete the category "{categoryToRemove}"? Existing inventory items belonging to this category will not be deleted but they will lose their classification matching.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCategoryToRemove(null)}
+                className="flex-1 px-4 py-2 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveCategory}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-transparent shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Dismissal Confirmation Modal */}
+      {userToDismiss && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm cursor-pointer"
+            onClick={() => setUserToDismiss(null)}
+          ></div>
+          <div className="relative bg-white border border-slate-200 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl p-6">
+            <h3 className="text-[17px] font-black text-slate-900 mb-2">Dismiss User?</h3>
+            <p className="text-[13px] font-medium text-slate-500 mb-6 leading-relaxed">
+              Permanently dismiss and delete {userToDismiss.displayName}'s access profile? <strong className="text-red-500">WARNING: This action cannot be undone.</strong>
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setUserToDismiss(null)}
+                className="flex-1 px-4 py-2 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDismissUser}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors border border-transparent shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <ShieldAlert className="size-3.5" />
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

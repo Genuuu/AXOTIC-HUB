@@ -13,6 +13,8 @@ export interface UserProfile {
   specifications?: string;
   birthday?: string;
   password?: string;
+  isOnline?: boolean;
+  lastActiveAt?: string;
 }
 
 export type ProjectStatus = "Planning" | "Fabricating" | "Testing" | "Finished";
@@ -88,6 +90,15 @@ export interface AllocatedHardware {
 
 export type IdeaStatus = "Pending" | "Discussing" | "Promoted";
 
+export interface IdeaComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface Idea {
   id: string;
   title: string;
@@ -102,5 +113,17 @@ export interface Idea {
   votedIds: string[];
   status: IdeaStatus;
   promotedProjectId?: string;
+  comments?: IdeaComment[];
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  createdBy: string;
+  creatorName: string;
+  createdAt: string;
+  type: "idea_created" | "project_created" | "comment_added";
+  linkId?: string; // e.g., idea id or project id
+  readBy: string[]; // array of userIds who have read it
 }
 

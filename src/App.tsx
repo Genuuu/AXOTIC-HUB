@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { auth, db, testConnectionObj, handleFirestoreError, OperationType } from "./firebase";
+import { auth, db, testConnectionObj, handleFirestoreError, OperationType, createGlobalNotification } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, onSnapshot, query, orderBy, doc, addDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, addDoc, serverTimestamp, setDoc, limit, updateDoc, arrayUnion } from "firebase/firestore";
 import { 
   LogOut, 
   Layers, 
@@ -27,9 +27,10 @@ import {
   Camera,
   Trash2,
   Cpu,
-  Boxes
+  Boxes,
+  Bell
 } from "lucide-react";
-import { UserProfile, Project } from "./types";
+import { UserProfile, Project, AppNotification } from "./types";
 import logoUrl from "../Images/Logo.png";
 
 // Import custom sub-panels
@@ -46,6 +47,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   
   // Theme state: light or dark
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -213,7 +216,7 @@ export default function App() {
         setSavingProfile(false);
         setIsEditProfileOpen(false);
       } catch (err) {
-        console.error("Profile update fail", err);
+        console.error("Profile update fail", err instanceof Error ? err.message : String(err));
         setProfileError("Database connection failed. Please try again.");
         setSavingProfile(false);
       }
@@ -254,7 +257,7 @@ export default function App() {
           }
           setAuthChecking(false);
         }, (err) => {
-          console.error("Firestore user profile stream failed", err);
+          console.error("Firestore user profile stream failed", err instanceof Error ? err.message : String(err));
           setAuthChecking(false);
           handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
         });
@@ -348,11 +351,59 @@ export default function App() {
       });
       setRoster(users);
     }, (err) => {
-      console.warn("Could not load roster list securely. Authenticated access constraints active.", err);
+      console.warn("Could not load roster list securely. Authenticated access constraints active.", err instanceof Error ? err.message : String(err));
     });
 
     return () => unsubRoster();
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const updateActiveStatus = async () => {
+      if (currentUser.isOfflineMock) {
+        let stored = localStorage.getItem("axotic_mock_roster");
+        if (stored) {
+           let list = JSON.parse(stored);
+           let idx = list.findIndex((u: any) => u.uid === currentUser.uid);
+           if (idx !== -1) {
+              list[idx].isOnline = true;
+              list[idx].lastActiveAt = new Date().toISOString();
+              localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
+              window.dispatchEvent(new Event("axotic_db_update"));
+           }
+        }
+        return;
+      }
+
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        await setDoc(userRef, { lastActiveAt: new Date().toISOString(), isOnline: true }, { merge: true });
+      } catch (err) {
+        console.warn("Failed to update active status", err instanceof Error ? err.message : String(err));
+      }
+    };
+
+    updateActiveStatus();
+    const intervalId = setInterval(updateActiveStatus, 2 * 60 * 1000);
+
+    const handleBeforeUnload = () => {
+       if (currentUser.isOfflineMock) return;
+       const userRef = doc(db, "users", currentUser.uid);
+       setDoc(userRef, { isOnline: false, lastActiveAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (!currentUser.isOfflineMock) {
+         const userRef = doc(db, "users", currentUser.uid);
+         setDoc(userRef, { isOnline: false, lastActiveAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      }
+    };
+  }, [currentUser?.uid, currentUser?.isOfflineMock]);
 
   // 4. Stream Project lists globally to sync across screens (Only when logged in)
   useEffect(() => {
@@ -447,11 +498,43 @@ export default function App() {
       });
       setProjectsList(items);
     }, (err) => {
-      console.warn("Could not fetch global build listings real-time.", err);
+      console.warn("Could not fetch global build listings real-time.", err instanceof Error ? err.message : String(err));
     });
 
     return () => unsubProjects();
   }, [currentUser?.uid]);
+
+  // Stream notifications real-time
+  useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+    
+    if (currentUser.isOfflineMock) {
+      const loadLocalNotifs = () => {
+        const n = localStorage.getItem("axotic_mock_notifications");
+        if (n) {
+          try {
+            setNotifications(JSON.parse(n));
+          } catch (_) {}
+        }
+      };
+      loadLocalNotifs();
+      window.addEventListener("axotic_db_update", loadLocalNotifs);
+      return () => window.removeEventListener("axotic_db_update", loadLocalNotifs);
+    }
+
+    const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(50));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const items: AppNotification[] = [];
+      snapshot.forEach(docSnap => items.push({ id: docSnap.id, ...docSnap.data() } as AppNotification));
+      setNotifications(items);
+    }, (err) => {
+      console.warn("Failed to stream notifications", err instanceof Error ? err.message : String(err));
+    });
+    return () => unsub();
+  }, [currentUser?.uid, currentUser?.isOfflineMock]);
 
   const handlePromoteToProject = async (idea: any): Promise<string> => {
     const timestamp = new Date().toISOString();
@@ -492,6 +575,7 @@ export default function App() {
       
       // Dispatch storage update so that active panels pick up the new project
       window.dispatchEvent(new Event("axotic_db_update"));
+      createGlobalNotification("project_created", `Idea "${idea.title}" was promoted to a full project.`, generatedId, currentUser);
       return generatedId;
     } else {
       const docRef = await addDoc(collection(db, "projects"), {
@@ -499,6 +583,7 @@ export default function App() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+      createGlobalNotification("project_created", `Idea "${idea.title}" was promoted to a full project.`, docRef.id, currentUser);
       return docRef.id;
     }
   };
@@ -510,7 +595,7 @@ export default function App() {
       setCurrentUser(null);
       setActiveTab("projects");
     } catch (err) {
-      console.error("Sign-out failure", err);
+      console.error("Sign-out failure", err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -813,7 +898,89 @@ export default function App() {
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 relative">
+                  {/* Notifications Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowNotificationsMenu(!showNotificationsMenu)}
+                      className="size-9 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700 text-slate-650 dark:text-slate-350 transition-all flex items-center justify-center cursor-pointer shadow-3xs relative"
+                    >
+                      <Bell className="size-4.5" />
+                      {notifications.some(n => n.createdBy !== currentUser?.uid && !n.readBy.includes(currentUser?.uid || "")) && (
+                        <div className="absolute top-2 right-2.5 size-1.5 bg-red-500 rounded-full animate-pulse blur-[1px]"></div>
+                      )}
+                      {notifications.some(n => n.createdBy !== currentUser?.uid && !n.readBy.includes(currentUser?.uid || "")) && (
+                        <div className="absolute top-2 right-2.5 size-1.5 bg-red-500 rounded-full"></div>
+                      )}
+                    </button>
+
+                    {showNotificationsMenu && (
+                      <div className="absolute right-0 top-12 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl overflow-hidden z-50 flex flex-col max-h-[400px]">
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">Recent Activity</h4>
+                          <button 
+                            onClick={() => {
+                              // mark all as read logic could go here
+                              setShowNotificationsMenu(false);
+                            }}
+                            className="text-[10px] text-blue-600 hover:underline font-semibold"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <div className="overflow-y-auto flex-1 p-2 space-y-1">
+                          {notifications.length === 0 ? (
+                            <p className="p-4 text-center text-xs text-slate-500">No new activity found.</p>
+                          ) : (
+                            notifications.map((notif) => {
+                              const isUnread = notif.createdBy !== currentUser?.uid && !notif.readBy.includes(currentUser?.uid || "");
+                              return (
+                                <div 
+                                  key={notif.id} 
+                                  className={`p-3 rounded-xl border transition-colors ${
+                                    isUnread
+                                      ? "bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50"
+                                      : "bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                  }`}
+                                  onClick={async () => {
+                                    if (isUnread && currentUser && !currentUser.isOfflineMock) {
+                                      try {
+                                        await updateDoc(doc(db, "notifications", notif.id), {
+                                          readBy: arrayUnion(currentUser.uid)
+                                        });
+                                      } catch (e) {}
+                                    } else if (isUnread && currentUser && currentUser.isOfflineMock) {
+                                      const local = localStorage.getItem("axotic_mock_notifications");
+                                      if (local) {
+                                        let curr = JSON.parse(local);
+                                        let idx = curr.findIndex((c: any) => c.id === notif.id);
+                                        if (idx !== -1) {
+                                          if (!curr[idx].readBy) curr[idx].readBy = [];
+                                          curr[idx].readBy.push(currentUser.uid);
+                                          localStorage.setItem("axotic_mock_notifications", JSON.stringify(curr));
+                                          window.dispatchEvent(new Event("axotic_db_update"));
+                                        }
+                                      }
+                                    }
+                                    if (notif.type === "idea_created" || notif.type === "comment_added") setActiveTab("ideas");
+                                    if (notif.type === "project_created") setActiveTab("projects");
+                                    setShowNotificationsMenu(false);
+                                  }}
+                                >
+                                  <div className="flex items-baseline justify-between mb-1">
+                                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">{notif.creatorName}</span>
+                                    <span className="text-[9px] text-slate-400">{new Date(notif.createdAt).toLocaleDateString()}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug">{notif.message}</p>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Theme Toggle Button */}
                   <button
                     onClick={() => setIsDark(!isDark)}

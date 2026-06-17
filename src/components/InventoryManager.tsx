@@ -106,7 +106,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
           setCategories(Array.from(new Set(list)));
         }
       }, (err) => {
-        console.warn("Could not stream categories dynamically", err);
+        console.warn("Could not stream categories dynamically", err instanceof Error ? err.message : String(err));
       });
       return () => unsub();
     }
@@ -242,7 +242,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
         setSelectedSalvageHardware(null);
       }
     }, (err) => {
-      console.warn("Could not load hardware for salvage. Standard write guidelines apply.", err);
+      console.warn("Could not load hardware for salvage. Standard write guidelines apply.", err instanceof Error ? err.message : String(err));
     });
 
     return () => unsubscribe();
@@ -417,7 +417,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
           }
         }
       } catch (err) {
-        console.error(err);
+        console.error(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
@@ -454,7 +454,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
           triggerFeedback(`Successfully removed ${item.name} from stockroom catalog.`);
         }
       } catch (err) {
-        console.error(err);
+        console.error(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
         setDeleteConfirmItemId(null);
@@ -548,7 +548,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
         setCheckoutQty(1);
         triggerFeedback(`Allocated x${checkoutQty} ${checkoutItem.name} directly to ${selectedProj.title}.`);
       } catch (err) {
-        console.error("Local allocation error", err);
+        console.error("Local allocation error", err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
@@ -668,7 +668,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
         setSalvageProjectId("");
         triggerFeedback(`Successfully salvaged x${salvageQty} ${selectedSalvageHardware.name} components.`);
       } catch (err) {
-        console.error("Local salvage error", err);
+        console.error("Local salvage error", err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }

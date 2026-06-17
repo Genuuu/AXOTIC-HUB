@@ -358,6 +358,15 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
               ? member.specifications.split(",").map(s => s.trim()).filter(Boolean)
               : [];
 
+            // Compute if member is online
+            const isOnline = (() => {
+              if (isMe) return true;
+              if (member.isOnline !== true) return false;
+              if (!member.lastActiveAt) return false;
+              const activeTime = new Date(member.lastActiveAt).getTime();
+              return Date.now() - activeTime < 5 * 60 * 1000;
+            })();
+
             return (
               <div
                 key={member.uid}
@@ -397,9 +406,15 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                         )}
                         
                         <div className="flex items-center gap-1.5 mt-1.5">
-                          <span className="px-1.5 py-0.5 bg-emerald-50 border border-emerald-150 text-emerald-700 text-[9px] font-bold rounded flex items-center gap-1 select-none">
-                            <span className="size-1 bg-emerald-500 rounded-full animate-pulse" /> Active Node
-                          </span>
+                          {isOnline ? (
+                            <span className="px-1.5 py-0.5 bg-emerald-50 border border-emerald-150 text-emerald-700 text-[9px] font-bold rounded flex items-center gap-1 select-none">
+                              <span className="size-1 bg-emerald-500 rounded-full animate-pulse" /> Online
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 text-[9px] font-bold rounded flex items-center gap-1 select-none">
+                              <span className="size-1 bg-slate-400 rounded-full" /> Offline
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
