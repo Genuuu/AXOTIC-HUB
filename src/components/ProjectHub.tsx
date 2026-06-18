@@ -42,7 +42,7 @@ import {
   Printer,
   Download
 } from "lucide-react";
-import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, SponsorFunding, MemberContribution } from "../types";
+import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, SponsorFunding, MemberContribution, PeerTransfer } from "../types";
 
 interface ProjectHubProps {
   currentUser: UserProfile;
@@ -129,6 +129,12 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   const [newContribAmount, setNewContribAmount] = useState("");
   const [newContribNotes, setNewContribNotes] = useState("");
   const [newContribType, setNewContribType] = useState<"reimbursable" | "donation">("reimbursable");
+  
+  // New peer to peer transfer scratch states
+  const [newTransferFromMemberId, setNewTransferFromMemberId] = useState("");
+  const [newTransferToMemberId, setNewTransferToMemberId] = useState("");
+  const [newTransferAmount, setNewTransferAmount] = useState("");
+  const [newTransferNotes, setNewTransferNotes] = useState("");
   
   // State for print and document format generation
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -752,7 +758,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       budget: parseFloat(newBudget) || 0,
       estimatedCost: parseFloat(newEstimatedCost) || 0,
       costSplitType: newCostSplitType,
-      memberCostSplits: newMemberCostSplits
+      memberCostSplits: newMemberCostSplits,
+      budgetItems: [],
+      sponsorFundings: [],
+      memberContributions: [],
+      peerTransfers: []
     };
 
     const clearCreateForm = () => {
@@ -1123,6 +1133,41 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
 
     const payloadFields = {
       memberContributions: updatedContributions,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (currentUser.isOfflineMock) {
+      const stored = localStorage.getItem("axotic_mock_projects");
+      if (stored) {
+        const items: Project[] = JSON.parse(stored);
+        const idx = items.findIndex(p => p.id === selectedProject.id);
+        if (idx !== -1) {
+          const updatedProj = {
+            ...items[idx],
+            ...payloadFields
+          };
+          items[idx] = updatedProj;
+          localStorage.setItem("axotic_mock_projects", JSON.stringify(items));
+          window.dispatchEvent(new Event("axotic_db_update"));
+          setSelectedProject(updatedProj);
+        }
+      }
+      return;
+    }
+
+    const projectRef = doc(db, "projects", selectedProject.id);
+    try {
+      await updateDoc(projectRef, payloadFields);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `projects/${selectedProject.id}`);
+    }
+  };
+
+  const handleUpdatePeerTransfers = async (updatedPeerTransfers: PeerTransfer[]) => {
+    if (!selectedProject) return;
+
+    const payloadFields = {
+      peerTransfers: updatedPeerTransfers,
       updatedAt: new Date().toISOString()
     };
 
@@ -1591,6 +1636,18 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 }
               });
 
+              // Apply recorded peer-to-peer cash transfers to adjust spent out-of-pocket
+              const peerTransfers = selectedProject.peerTransfers || [];
+              const peerTransfersTotal = peerTransfers.reduce((sum, t) => sum + t.amount, 0);
+              peerTransfers.forEach(t => {
+                if (spentByMember[t.fromMemberId] !== undefined) {
+                  spentByMember[t.fromMemberId] += t.amount;
+                }
+                if (spentByMember[t.toMemberId] !== undefined) {
+                  spentByMember[t.toMemberId] -= t.amount;
+                }
+              });
+
               // Calculate fair share per member (offset by sponsor fundings)
               const fairShares: Record<string, number> = {};
               participants.forEach(uid => {
@@ -1690,6 +1747,19 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     c.type === "reimbursable" ? "Reimbursable Cost Offset" : "Gift Donation Offset",
                     c.notes || "",
                     c.amount.toFixed(2)
+                  ]);
+                });
+                rows.push([]);
+
+                // Section 3.5: Peer-to-Peer Direct Transfers
+                rows.push(["RECORDED DIRECT PEER-TO-PEER TRANSFERS"]);
+                rows.push(["Payer (From)", "Transfer Notes", "Recipient (To)", "Amount (LKR)"]);
+                peerTransfers.forEach(pt => {
+                  rows.push([
+                    getParticipantName(pt.fromMemberId),
+                    pt.notes || "Direct Reimbursement",
+                    getParticipantName(pt.toMemberId),
+                    pt.amount.toFixed(2)
                   ]);
                 });
                 rows.push([]);
@@ -2324,6 +2394,199 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold rounded-md cursor-pointer hover:shadow-xs transition-all active:scale-98 shrink-0"
                             >
                               Log Contribution
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* DIRECT PEER-TO-PEER TRANSFERS */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 pb-2 border-dashed">
+                      <h4 className="text-xs font-bold uppercase text-slate-750 tracking-wider flex items-center gap-1.5 select-none font-semibold">
+                        <Coins className="size-4 text-emerald-600" />
+                        Direct Peer-to-Peer Transfers
+                      </h4>
+                      <p className="text-[10px] text-slate-400 italic">
+                        Record offline transfers (hand-to-hand money or bank transfers) from one member to another to offset project debts.
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50/40 border border-slate-200/60 rounded-xl p-4 space-y-4">
+                      {peerTransfers.length === 0 ? (
+                        <div className="text-center py-6 text-slate-400 text-xs italic bg-white rounded-lg border border-slate-150">
+                          No peer-to-peer payments logged yet. Fill out fields below to record cash or direct transfers.
+                        </div>
+                      ) : (
+                        <div className="bg-white border border-slate-150 rounded-lg overflow-hidden shadow-2xs">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase text-[9px] tracking-wider select-none">
+                                <th className="p-2.5">Payer (From)</th>
+                                <th className="p-2.5 text-center w-12">Transfer</th>
+                                <th className="p-2.5">Recipient (To)</th>
+                                <th className="p-2.5">Transfer notes</th>
+                                <th className="p-2.5 text-right w-1/4">Amount (LKR)</th>
+                                <th className="p-2.5 text-center w-16">Remove</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150">
+                              {peerTransfers.map((pt) => (
+                                <tr key={pt.id} className="hover:bg-slate-50/40">
+                                  <td className="p-2.5">
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-bold text-slate-800">{getParticipantName(pt.fromMemberId)}</span>
+                                      <span className="text-[8px] uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200 px-1 rounded-sm">
+                                        Payer
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5 text-center text-slate-400 font-bold font-mono">➜</td>
+                                  <td className="p-2.5">
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-bold text-slate-800">{getParticipantName(pt.toMemberId)}</span>
+                                      <span className="text-[8px] uppercase tracking-wide bg-blue-50 text-blue-700 border border-blue-200 px-1 rounded-sm">
+                                        Recipient
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5 text-slate-500 italic truncate max-w-[150px]" title={pt.notes}>{pt.notes || "Direct Payment"}</td>
+                                  <td className="p-2.5 font-mono text-right font-black text-rose-600">
+                                    LKR {pt.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-2.5 text-center">
+                                    {canModifyProject(selectedProject) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nextTransfers = peerTransfers.filter(item => item.id !== pt.id);
+                                          handleUpdatePeerTransfers(nextTransfers);
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-red-500 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                        title="Remove Peer Transfer Record"
+                                      >
+                                        <Trash2 className="size-3.5" />
+                                      </button>
+                                    ) : (
+                                      <span className="text-slate-300">-</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Add Peer Transfer Inline Controls */}
+                      {canModifyProject(selectedProject) && (
+                        <div className="bg-white p-3.5 rounded-lg border border-slate-150 space-y-3">
+                          <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-650 flex items-center gap-1 mb-1">
+                            <Plus className="size-3.5 text-emerald-600" /> Record Offline Peer Transfer Row
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+                            {/* From Dropdown */}
+                            <div>
+                              <select
+                                value={newTransferFromMemberId}
+                                onChange={(e) => setNewTransferFromMemberId(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded px-2 py-1.5 text-xs text-slate-700 outline-hidden font-medium cursor-pointer"
+                              >
+                                <option value="">Select Payer (From)...</option>
+                                {participants.map(pId => (
+                                  <option key={pId} value={pId}>{getParticipantName(pId)}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* To Dropdown */}
+                            <div>
+                              <select
+                                value={newTransferToMemberId}
+                                onChange={(e) => setNewTransferToMemberId(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded px-2 py-1.5 text-xs text-slate-700 outline-hidden font-medium cursor-pointer"
+                              >
+                                <option value="">Select Recipient (To)...</option>
+                                {participants.map(pId => (
+                                  <option key={pId} value={pId}>{getParticipantName(pId)}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Amount field */}
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-2.5 text-slate-400 font-mono text-[9px] leading-none select-none font-normal">LKR</span>
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                placeholder="Amount (LKR)"
+                                value={newTransferAmount}
+                                onChange={(e) => setNewTransferAmount(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded pl-10 pr-2.5 py-1.5 text-xs text-right font-mono outline-hidden"
+                              />
+                            </div>
+
+                            {/* Purpose notes */}
+                            <div>
+                              <input
+                                type="text"
+                                placeholder="Purpose notes (e.g., cash refund, bank transfer)"
+                                value={newTransferNotes}
+                                onChange={(e) => setNewTransferNotes(e.target.value)}
+                                className="w-full bg-white border border-slate-205 focus:border-emerald-500 rounded px-2.5 py-1.5 text-xs outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center pt-1.5 border-t border-slate-100">
+                            <span className="text-[10px] text-slate-450 max-w-xl leading-relaxed text-left font-sans">
+                              💡 Record custom offline settles. This credits the Sender (increases their out-of-pocket spent column) and debits the Receiver (decreases their remaining target split balance).
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!newTransferFromMemberId) {
+                                  alert("Please select the Payer member (From).");
+                                  return;
+                                }
+                                if (!newTransferToMemberId) {
+                                  alert("Please select the Recipient member (To).");
+                                  return;
+                                }
+                                if (newTransferFromMemberId === newTransferToMemberId) {
+                                  alert("Cannot transfer money to the same person. Please pick different members.");
+                                  return;
+                                }
+                                const amt = parseFloat(newTransferAmount);
+                                if (isNaN(amt) || amt <= 0) {
+                                  alert("Please enter a valid transfer amount greater than 0.");
+                                  return;
+                                }
+                                const nextTransfers = [
+                                  ...peerTransfers,
+                                  {
+                                    id: `transfer-${Date.now()}`,
+                                    fromMemberId: newTransferFromMemberId,
+                                    toMemberId: newTransferToMemberId,
+                                    amount: amt,
+                                    notes: newTransferNotes.trim(),
+                                    createdAt: new Date().toISOString()
+                                  }
+                                ];
+                                handleUpdatePeerTransfers(nextTransfers);
+                                
+                                // Reset
+                                setNewTransferFromMemberId("");
+                                setNewTransferToMemberId("");
+                                setNewTransferAmount("");
+                                setNewTransferNotes("");
+                              }}
+                              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold rounded-md cursor-pointer hover:shadow-xs transition-all active:scale-98 shrink-0 font-bold"
+                            >
+                              Log Peer Transfer
                             </button>
                           </div>
                         </div>

@@ -353,24 +353,25 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
                         </p>
 
                         {/* Progress gauge visual bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-slate-400 font-medium">Build Progression Status</span>
-                            <span className="font-bold text-slate-700 font-mono">{percent}% finished</span>
+                        {proj.status !== "Continuous" && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400 font-medium">Build Progression Status</span>
+                              <span className="font-bold text-slate-700 font-mono">{percent}% finished</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  proj.status === "Planning" ? "bg-slate-400" :
+                                  proj.status === "Fabricating" ? "bg-blue-500" :
+                                  proj.status === "Testing" ? "bg-amber-500" :
+                                  "bg-emerald-500"
+                                }`} 
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                proj.status === "Planning" ? "bg-slate-400" :
-                                proj.status === "Fabricating" ? "bg-blue-500" :
-                                proj.status === "Testing" ? "bg-amber-500" :
-                                proj.status === "Continuous" ? "bg-sky-500 animate-pulse" :
-                                "bg-emerald-500"
-                              }`} 
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
-                        </div>
+                        )}
 
                         {/* Financial safeguard limits bar */}
                         <div className="bg-slate-50/50 p-2.5 rounded-lg border border-slate-150 text-[10px] space-y-1">

@@ -555,7 +555,9 @@ export default function App() {
       costSplitType: "equal",
       memberCostSplits: {},
       budgetItems: [],
-      sponsorFundings: []
+      sponsorFundings: [],
+      memberContributions: [],
+      peerTransfers: []
     };
 
     if (currentUser?.isOfflineMock) {
@@ -615,7 +617,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-200 antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100">
       
       {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out) */}
       {!currentUser ? (
@@ -898,7 +900,7 @@ export default function App() {
           <div className="flex-1 flex flex-col min-w-0">
             
             {/* Header Title Banner with workspace context description */}
-            <header className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800/60 px-6 py-5 hidden md:block text-left transition-colors duration-200">
+            <header className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800/60 px-6 py-5 hidden md:block text-left transition-colors duration-500 ease-in-out">
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display">
@@ -1052,53 +1054,109 @@ export default function App() {
               
               {/* View dispatch router */}
               <div className="flex-1 flex flex-col">
-                {activeTab === "home" && (
-                  <HomeDashboard 
-                    currentUser={currentUser} 
-                    roster={roster} 
-                    projectsList={projectsList} 
-                    onNavigate={(tab, projectId) => {
-                      setActiveTab(tab);
-                      if (projectId) {
-                        setSelectedProjectId(projectId);
-                      }
-                    }}
-                    onOpenEditProfile={handleOpenEditProfile}
-                  />
-                )}
-                {activeTab === "projects" && (
-                  <ProjectHub 
-                    currentUser={currentUser} 
-                    roster={roster} 
-                    initialSelectedProjectId={selectedProjectId}
-                    onClearInitialSelectedProjectId={() => setSelectedProjectId(null)}
-                  />
-                )}
-                {activeTab === "ideas" && (
-                  <IdeasBoard
-                    currentUser={currentUser}
-                    roster={roster}
-                    onPromoteToProject={async (idea) => {
-                      const newId = await handlePromoteToProject(idea);
-                      setActiveTab("projects");
-                      setSelectedProjectId(newId);
-                      return newId;
-                    }}
-                  />
-                )}
-                {activeTab === "inventory" && (
-                  <InventoryManager currentUser={currentUser} projects={projectsList} />
-                )}
-                {activeTab === "roster" && (
-                  <MemberRoster currentUser={currentUser} roster={roster} />
-                )}
-                {activeTab === "settings" && currentUser && (
-                  <AdminSettings 
-                    currentUser={currentUser} 
-                    isDark={isDark} 
-                    onToggleTheme={() => setIsDark(!isDark)}
-                  />
-                )}
+                <AnimatePresence mode="wait">
+                  {activeTab === "home" && (
+                    <motion.div
+                      key="home"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <HomeDashboard 
+                        currentUser={currentUser} 
+                        roster={roster} 
+                        projectsList={projectsList} 
+                        onNavigate={(tab, projectId) => {
+                          setActiveTab(tab);
+                          if (projectId) {
+                            setSelectedProjectId(projectId);
+                          }
+                        }}
+                        onOpenEditProfile={handleOpenEditProfile}
+                      />
+                    </motion.div>
+                  )}
+                  {activeTab === "projects" && (
+                    <motion.div
+                      key="projects"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <ProjectHub 
+                        currentUser={currentUser} 
+                        roster={roster} 
+                        initialSelectedProjectId={selectedProjectId}
+                        onClearInitialSelectedProjectId={() => setSelectedProjectId(null)}
+                      />
+                    </motion.div>
+                  )}
+                  {activeTab === "ideas" && (
+                    <motion.div
+                      key="ideas"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <IdeasBoard
+                        currentUser={currentUser}
+                        roster={roster}
+                        onPromoteToProject={async (idea) => {
+                          const newId = await handlePromoteToProject(idea);
+                          setActiveTab("projects");
+                          setSelectedProjectId(newId);
+                          return newId;
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                  {activeTab === "inventory" && (
+                    <motion.div
+                      key="inventory"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <InventoryManager currentUser={currentUser} projects={projectsList} />
+                    </motion.div>
+                  )}
+                  {activeTab === "roster" && (
+                    <motion.div
+                      key="roster"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <MemberRoster currentUser={currentUser} roster={roster} />
+                    </motion.div>
+                  )}
+                  {activeTab === "settings" && currentUser && (
+                    <motion.div
+                      key="settings"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <AdminSettings 
+                        currentUser={currentUser} 
+                        isDark={isDark} 
+                        onToggleTheme={() => setIsDark(!isDark)}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
             </main>

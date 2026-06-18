@@ -9,7 +9,14 @@
 
 body {
   font-family: var(--font-sans);
-  @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200;
+  @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out;
+}
+
+/* Universal premium smooth theme cross-fade transitions for color properties */
+*, *::before, *::after {
+  transition-property: background-color, border-color, text-decoration-color, fill, stroke, color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 500ms;
 }
 
 /* Universal dark theme overrides to guarantee comprehensive and premium visual compatibility */

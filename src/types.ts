@@ -44,6 +44,16 @@ export interface MemberContribution {
   createdAt: string;
 }
 
+export interface PeerTransfer {
+  id: string;
+  id_? : string; // keeping compatible
+  fromMemberId: string;
+  toMemberId: string;
+  amount: number;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -66,6 +76,7 @@ export interface Project {
   budgetItems?: BudgetItem[];
   sponsorFundings?: SponsorFunding[];
   memberContributions?: MemberContribution[];
+  peerTransfers?: PeerTransfer[];
 }
 
 export interface ProjectLog {

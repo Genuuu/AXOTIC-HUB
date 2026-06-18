@@ -42,7 +42,9 @@
         "costSplitType": { "type": "string" },
         "memberCostSplits": { "type": "object" },
         "budgetItems": { "type": "array" },
-        "sponsorFundings": { "type": "array" }
+        "sponsorFundings": { "type": "array" },
+        "memberContributions": { "type": "array" },
+        "peerTransfers": { "type": "array" }
       },
       "required": ["id", "title", "status", "createdBy"]
     },

@@ -76,7 +76,7 @@ service cloud.firestore {
         isVerifiedAdmin() ||
         (resource.data.status != 'Finished' && (
           (request.auth.uid == resource.data.createdBy || request.auth.uid == resource.data.leaderId || request.auth.uid in resource.data.memberIds) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'status', 'leaderId', 'leaderName', 'memberIds', 'memberNames', 'deadline', 'startDate', 'kicadLink', 'updatedAt', 'budget', 'estimatedCost', 'costSplitType', 'memberCostSplits', 'budgetItems', 'sponsorFundings'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'status', 'leaderId', 'leaderName', 'memberIds', 'memberNames', 'deadline', 'startDate', 'kicadLink', 'updatedAt', 'budget', 'estimatedCost', 'costSplitType', 'memberCostSplits', 'budgetItems', 'sponsorFundings', 'memberContributions', 'peerTransfers'])
         ))
       );
       allow delete: if isVerifiedAdmin() || (isVerifiedMember() && resource.data.createdBy == request.auth.uid);
