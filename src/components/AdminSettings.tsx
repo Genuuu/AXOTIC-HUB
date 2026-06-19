@@ -37,11 +37,16 @@ import {
   User,
   Mail,
   Phone,
-  Upload
+  Upload,
+  Target,
+  HeartHandshake,
+  Image,
+  Megaphone
 } from "lucide-react";
 import { UserProfile, UserRole, AdminLog } from "../types";
 import AddMember from "./AddMember";
 import TagInput from "./TagInput";
+import { defaultPublicLandingData, PublicLandingData, SubTeam, BuildSpec, TrackRecord } from "./defaultPublicLandingData";
 
 interface AdminSettingsProps {
   currentUser: UserProfile;
@@ -50,7 +55,7 @@ interface AdminSettingsProps {
 }
 
 export default function AdminSettings({ currentUser, isDark = false, onToggleTheme }: AdminSettingsProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"general" | "onboard" | "logs" | "preferences">(() => {
+  const [activeSubTab, setActiveSubTab] = useState<"general" | "onboard" | "logs" | "preferences" | "public_page">(() => {
     return currentUser?.role === "admin" ? "general" : "preferences";
   });
   const [categories, setCategories] = useState<string[]>([]);
@@ -77,8 +82,13 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
 
   // General Settings States
   const [workspaceName, setWorkspaceName] = useState("AXOTIC Robotics Hub");
+  const [logoUrl, setLogoUrl] = useState("");
   const [returnPeriod, setReturnPeriod] = useState("30 days");
   const [allowPublicVisibility, setAllowPublicVisibility] = useState(true);
+
+  // Public Landing Page Editor States
+  const [publicPageData, setPublicPageData] = useState<PublicLandingData | null>(null);
+  const [savingPublicPage, setSavingPublicPage] = useState(false);
 
   // Personal Member Preferences States
   const [prefDisplayName, setPrefDisplayName] = useState(currentUser?.displayName || "");
@@ -219,9 +229,11 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
   useEffect(() => {
     if (currentUser.isOfflineMock) {
       const name = localStorage.getItem("axotic_workspace_name");
+      const logo = localStorage.getItem("axotic_logo_url");
       const period = localStorage.getItem("axotic_return_period");
       const pub = localStorage.getItem("axotic_public_onboarding");
       if (name) setWorkspaceName(name);
+      if (logo) setLogoUrl(logo);
       if (period) setReturnPeriod(period);
       if (pub) setAllowPublicVisibility(pub === "true");
     } else {
@@ -229,6 +241,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
         if (d.exists()) {
           const data = d.data();
           if (data.workspaceName) setWorkspaceName(data.workspaceName);
+          if (data.logoUrl) setLogoUrl(data.logoUrl);
           if (data.returnPeriod) setReturnPeriod(data.returnPeriod);
           if (data.allowPublicVisibility !== undefined) setAllowPublicVisibility(data.allowPublicVisibility);
         }
@@ -238,6 +251,71 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
       return () => unsub();
     }
   }, [currentUser.isOfflineMock]);
+
+  // Load Public Landing settings configuration on mount
+  useEffect(() => {
+    if (currentUser.isOfflineMock) {
+      const stored = localStorage.getItem("axotic_public_landing_config");
+      if (stored) {
+        try {
+          setPublicPageData({
+            ...defaultPublicLandingData,
+            ...JSON.parse(stored)
+          });
+        } catch (_) {
+          setPublicPageData(defaultPublicLandingData);
+        }
+      } else {
+        setPublicPageData(defaultPublicLandingData);
+      }
+    } else {
+      const unsub = onSnapshot(doc(db, "landing", "public"), (snap) => {
+        if (snap.exists()) {
+          const d = snap.data() as Partial<PublicLandingData>;
+          setPublicPageData({
+            ...defaultPublicLandingData,
+            ...d,
+            subTeams: d.subTeams || defaultPublicLandingData.subTeams,
+            buildSpecs: d.buildSpecs || defaultPublicLandingData.buildSpecs,
+            trackRecords: d.trackRecords || defaultPublicLandingData.trackRecords,
+            galleryPhotos: d.galleryPhotos || defaultPublicLandingData.galleryPhotos,
+          } as PublicLandingData);
+        } else {
+          setPublicPageData(defaultPublicLandingData);
+        }
+      }, (err) => {
+        console.warn("Could not load public page configurations", err.message);
+        setPublicPageData(defaultPublicLandingData);
+      });
+      return () => unsub();
+    }
+  }, [currentUser.isOfflineMock]);
+
+  const handleSavePublicPage = async (updatedData: PublicLandingData) => {
+    setSavingPublicPage(true);
+    setSuccessMsg("");
+    setErrorMsg("");
+
+    if (currentUser.isOfflineMock) {
+      localStorage.setItem("axotic_public_landing_config", JSON.stringify(updatedData));
+      setPublicPageData(updatedData);
+      createAdminLog("WORKSPACE_CONFIG", "Modified public landing page structures and descriptions in sandbox.", currentUser);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg("Public landing page configuration saved successfully to sandbox!");
+      setSavingPublicPage(false);
+    } else {
+      try {
+        await setDoc(doc(db, "landing", "public"), updatedData);
+        createAdminLog("WORKSPACE_CONFIG", "Modified public landing page structures and descriptions permanently in database.", currentUser);
+        setSuccessMsg("Public landing page configuration saved successfully to live database!");
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : String(err));
+        handleFirestoreError(err, OperationType.WRITE, "landing/public");
+      } finally {
+        setSavingPublicPage(false);
+      }
+    }
+  };
 
   // Load Users Roster dynamically
   useEffect(() => {
@@ -480,12 +558,13 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
 
     if (currentUser.isOfflineMock) {
       localStorage.setItem("axotic_workspace_name", workspaceName);
+      localStorage.setItem("axotic_logo_url", logoUrl);
       localStorage.setItem("axotic_return_period", returnPeriod);
       localStorage.setItem("axotic_public_onboarding", String(allowPublicVisibility));
       
       createAdminLog(
         "WORKSPACE_CONFIG",
-        `Updated workspace config parameters: Name: "${workspaceName}", return duration set: "${returnPeriod}", citizen public onboarding flag: "${allowPublicVisibility ? "Enabled" : "Disabled"}".`,
+        `Updated workspace config parameters: Name: "${workspaceName}", citizen public onboarding flag: "${allowPublicVisibility ? "Enabled" : "Disabled"}".`,
         currentUser
       );
       
@@ -496,6 +575,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
       try {
         await setDoc(doc(db, "settings", "general"), {
           workspaceName,
+          logoUrl,
           returnPeriod,
           allowPublicVisibility,
           updatedBy: currentUser.uid,
@@ -504,7 +584,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
 
         createAdminLog(
           "WORKSPACE_CONFIG",
-          `Updated workspace config parameters: Name: "${workspaceName}", return duration set: "${returnPeriod}", citizen public onboarding flag: "${allowPublicVisibility ? "Enabled" : "Disabled"}".`,
+          `Updated workspace config parameters: Name: "${workspaceName}", citizen public onboarding flag: "${allowPublicVisibility ? "Enabled" : "Disabled"}".`,
           currentUser
         );
 
@@ -637,11 +717,11 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
 
       {/* Sub-tabs Navigation */}
       {currentUser?.role === "admin" && (
-        <div className="flex border border-slate-200 bg-slate-100/80 dark:bg-slate-800/85 p-1 rounded-xl gap-1 max-w-2xl" id="settings-sub-navigation">
+        <div className="flex border border-slate-200 bg-slate-100/80 dark:bg-slate-800/85 p-1 rounded-xl gap-1 max-w-full overflow-x-auto whitespace-nowrap scrollbar-none" id="settings-sub-navigation">
           <button
             type="button"
             onClick={() => setActiveSubTab("general")}
-            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeSubTab === "general"
                 ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
@@ -653,7 +733,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
           <button
             type="button"
             onClick={() => setActiveSubTab("onboard")}
-            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeSubTab === "onboard"
                 ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
@@ -665,7 +745,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
           <button
             type="button"
             onClick={() => setActiveSubTab("logs")}
-            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeSubTab === "logs"
                 ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
@@ -677,14 +757,26 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
           <button
             type="button"
             onClick={() => setActiveSubTab("preferences")}
-            className={`flex-1 px-2.5 py-1.8 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeSubTab === "preferences"
                 ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
-                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
             }`}
             id="btn-subnav-preferences"
           >
             <User className="size-3.5" /> My Preferences
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("public_page")}
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "public_page"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-publicpage"
+          >
+            <Laptop className="size-3.5" /> Landing Workspace
           </button>
         </div>
       )}
@@ -747,7 +839,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                       <button
                         type="button"
                         onClick={() => setCategoryToRemove(cat)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                         title="Delete product category"
                       >
                         <Trash2 className="size-3.5" />
@@ -768,7 +860,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
 
             <form onSubmit={handleSaveGeneralConfig} className="p-6 space-y-6">
               
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">Hub Organization Name</label>
                   <input
@@ -777,6 +869,16 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                     className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-hidden font-medium dark:bg-slate-950 dark:border-slate-800"
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">Hub Organization Logo URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/logo.png"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-hidden font-medium dark:bg-slate-950 dark:border-slate-800"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
                   />
                 </div>
               </div>
@@ -850,7 +952,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                   >
                     <div className="flex items-center space-x-3 min-w-0">
                       <img 
-                        src={user.avatarUrl} 
+                        src={user.avatarUrl || undefined} 
                         alt={user.displayName} 
                         className="size-9 rounded-lg border border-slate-100 shrink-0"
                       />
@@ -920,7 +1022,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
 
               <form onSubmit={handleSaveUserProfile} className="p-5 space-y-4">
                 <div className="flex items-center space-x-3 p-2 bg-slate-50 rounded-xl">
-                  <img src={selectedUserForEdit.avatarUrl} alt="" className="size-10 rounded-lg bg-white" />
+                  <img src={selectedUserForEdit.avatarUrl || undefined} alt="" className="size-10 rounded-lg bg-white" />
                   <div className="text-left">
                     <span className="text-xs font-bold text-slate-800 block">{selectedUserForEdit.displayName}</span>
                     <span className="text-[10px] font-mono text-slate-400">{selectedUserForEdit.email}</span>
@@ -1104,7 +1206,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                 }
 
                 return (
-                  <div key={log.id} className="p-5 flex items-start justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                  <div key={log.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 hover:bg-slate-50/50 transition-colors">
                     <div className="flex gap-4 min-w-0 flex-1">
                       
                       {/* Left circular avatar-badge identifier */}
@@ -1134,11 +1236,11 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                     </div>
 
                     {/* Right timestamp display */}
-                    <div className="shrink-0 flex flex-col items-end justify-between self-stretch h-full">
-                      <span className="text-[10px] text-slate-500 font-medium font-mono whitespace-nowrap bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                    <div className="shrink-0 flex flex-row sm:flex-col items-center sm:items-end justify-between sm:self-stretch border-t border-slate-100 dark:border-slate-800 sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
+                      <span className="text-[10px] text-slate-500 font-medium font-mono whitespace-nowrap bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850 px-2 py-0.5 rounded-md">
                         {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap font-mono mt-1">
+                      <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap font-mono mt-1 sm:mt-1">
                         {new Date(log.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                     </div>
@@ -1287,7 +1389,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                     <div className="size-16 rounded-xl overflow-hidden border-2 border-slate-200 dark:border-slate-755 bg-white dark:bg-slate-800 shadow-xs flex items-center justify-center">
                       {prefAvatarUrl ? (
                         <img 
-                          src={prefAvatarUrl} 
+                          src={prefAvatarUrl || undefined} 
                           alt="Avatar Visual" 
                           className="size-full object-cover"
                           referrerPolicy="no-referrer"
@@ -1381,6 +1483,657 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                 </div>
 
               </form>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {activeSubTab === "public_page" && publicPageData && (
+        <div className="space-y-8 animate-fade-in text-left font-sans">
+          
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 border border-slate-200 dark:border-slate-800 rounded-2xl">
+            <div>
+              <h3 className="text-base font-extrabold text-[#0f2e46] dark:text-blue-100 uppercase font-mono tracking-tight flex items-center gap-2">
+                <Laptop className="size-4 text-blue-600 dark:text-blue-400" /> Public Landing Workspace
+              </h3>
+              <p className="text-xs text-slate-550 mt-1 dark:text-slate-400">
+                Calibrate headers, origin narratives, sub-team segments, and sponsorship terms. Changes show up instantly.
+              </p>
+            </div>
+            
+            <button
+              onClick={() => handleSavePublicPage(publicPageData)}
+              disabled={savingPublicPage}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-widest rounded-xl shadow-md transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {savingPublicPage ? (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="size-3.5" /> Save Changes
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Left side: Hero, Mission & Sponsor Settings (8 Cols) */}
+            <div className="lg:col-span-8 space-y-6">
+              
+              {/* SECTION: HERO & WHO WE ARE */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <Sliders className="size-4 text-blue-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">A. Intro & About Us Settings</h3>
+                  </div>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show Intro</span>
+                      <input 
+                        type="checkbox" 
+                        checked={publicPageData.showIntro !== false}
+                        onChange={(e) => setPublicPageData({ ...publicPageData, showIntro: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500 relative"></div>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show About</span>
+                      <input 
+                        type="checkbox" 
+                        checked={publicPageData.showAboutUs !== false}
+                        onChange={(e) => setPublicPageData({ ...publicPageData, showAboutUs: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500 relative"></div>
+                    </label>
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Hero Title Placeholder</label>
+                    <input 
+                      type="text"
+                      value={publicPageData.heroTitle}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, heroTitle: e.target.value })}
+                      className="w-full text-xs font-medium px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 focus:bg-white dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Hero Organization Subtitle Description</label>
+                    <textarea 
+                      rows={2}
+                      value={publicPageData.heroSubtitle}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, heroSubtitle: e.target.value })}
+                      className="w-full text-xs font-medium p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 focus:bg-white dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4 pt-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#0f2e46] dark:text-blue-300 uppercase tracking-wider font-mono mb-1.5">Origin Block Title</label>
+                      <input 
+                        type="text"
+                        value={publicPageData.whoWeAreOriginTitle}
+                        onChange={(e) => setPublicPageData({ ...publicPageData, whoWeAreOriginTitle: e.target.value })}
+                        className="w-full text-xs font-mono px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Origin Narrative</label>
+                      <textarea 
+                        rows={4}
+                        value={publicPageData.whoWeAreOriginDesc}
+                        onChange={(e) => setPublicPageData({ ...publicPageData, whoWeAreOriginDesc: e.target.value })}
+                        className="w-full text-xs font-medium p-4 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: SUB-TEAMS BUILDER */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-4 text-emerald-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">B. Division Sub-Teams Registry</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newId = `sub-team-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                      const updatedTeams = [...publicPageData.subTeams, {
+                        id: newId,
+                        title: "New Sub-Team",
+                        description: "Add descriptive structural features here.",
+                        iconType: "wrench" as const
+                      }];
+                      setPublicPageData({ ...publicPageData, subTeams: updatedTeams });
+                    }}
+                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-sans"
+                  >
+                    <Plus className="size-3" /> Add Sub-Team
+                  </button>
+                </div>
+                <div className="p-6 space-y-6">
+                  {publicPageData.subTeams.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/25 border border-dashed rounded-xl border-slate-300">
+                      No active sub-teams registered. Click "Add Sub-Team" to catalog division entities.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {publicPageData.subTeams.map((team, idx) => (
+                        <div key={`${team.id}-${idx}`} className="relative bg-slate-50 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-850 rounded-xl flex flex-col justify-between">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filtered = publicPageData.subTeams.filter(t => t.id !== team.id);
+                              setPublicPageData({ ...publicPageData, subTeams: filtered });
+                            }}
+                            className="absolute top-3 right-3 text-slate-355 hover:text-red-500 transition-colors cursor-pointer"
+                            title="Delete Sub-team"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                          
+                          <div className="space-y-3">
+                            <div className="flex gap-2">
+                              <div className="w-1/3">
+                                <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Vector Icon</label>
+                                <select
+                                  value={team.iconType}
+                                  onChange={(e) => {
+                                    const updated = [...publicPageData.subTeams];
+                                    updated[idx] = { ...updated[idx], iconType: e.target.value as any };
+                                    setPublicPageData({ ...publicPageData, subTeams: updated });
+                                  }}
+                                  className="w-full text-[10px] font-mono px-2 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200"
+                                >
+                                  <option value="layers">Layers</option>
+                                  <option value="cpu">Cpu</option>
+                                  <option value="compass">Compass</option>
+                                  <option value="wrench">Wrench</option>
+                                  <option value="settings">Settings</option>
+                                </select>
+                              </div>
+                              <div className="w-2/3">
+                                <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Sub-Team Name</label>
+                                <input
+                                  type="text"
+                                  value={team.title}
+                                  onChange={(e) => {
+                                    const updated = [...publicPageData.subTeams];
+                                    updated[idx] = { ...updated[idx], title: e.target.value };
+                                    setPublicPageData({ ...publicPageData, subTeams: updated });
+                                  }}
+                                  className="w-full text-xs font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Commitment & Description</label>
+                              <textarea
+                                rows={2}
+                                value={team.description}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.subTeams];
+                                  updated[idx] = { ...updated[idx], description: e.target.value };
+                                  setPublicPageData({ ...publicPageData, subTeams: updated });
+                                }}
+                                className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100 leading-normal"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION: TECHNICAL BUILDS PORTFOLIO */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <FileCode className="size-4 text-blue-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">C. Our Builds Settings</h3>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show Builds</span>
+                      <input 
+                        type="checkbox" 
+                        checked={publicPageData.showBuilds !== false}
+                        onChange={(e) => setPublicPageData({ ...publicPageData, showBuilds: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500 relative"></div>
+                    </label>
+                    <button
+                    type="button"
+                    onClick={() => {
+                      const newId = `build-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                      const updatedBuilds = [...publicPageData.buildSpecs, {
+                        id: newId,
+                        category: "Category Name",
+                        title: "Featured Build Platform Name",
+                        subtitle: "Platform summary details.",
+                        technologies: "List of key system architectures."
+                      }];
+                      setPublicPageData({ ...publicPageData, buildSpecs: updatedBuilds });
+                    }}
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-mono text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-sans"
+                  >
+                    <Plus className="size-3" /> Register Built Spec
+                  </button>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {publicPageData.buildSpecs.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/25 border border-dashed rounded-xl border-slate-300">
+                      No builds cataloged. Keep records updated to prove engineering capability!
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {publicPageData.buildSpecs.map((build, idx) => (
+                        <div key={`${build.id}-${idx}`} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filtered = publicPageData.buildSpecs.filter(b => b.id !== build.id);
+                              setPublicPageData({ ...publicPageData, buildSpecs: filtered });
+                            }}
+                            className="absolute top-4 right-4 text-slate-355 hover:text-red-500 transition-colors cursor-pointer"
+                            title="Delete Spec"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Catalog Classification Category</label>
+                              <input
+                                type="text"
+                                value={build.category}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.buildSpecs];
+                                  updated[idx] = { ...updated[idx], category: e.target.value };
+                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                }}
+                                className="w-full text-xs font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Build Platform Name</label>
+                              <input
+                                type="text"
+                                value={build.title}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.buildSpecs];
+                                  updated[idx] = { ...updated[idx], title: e.target.value };
+                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                }}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Subtitle Summary</label>
+                              <input
+                                type="text"
+                                value={build.subtitle}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.buildSpecs];
+                                  updated[idx] = { ...updated[idx], subtitle: e.target.value };
+                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                }}
+                                className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="mt-3">
+                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Primary Integrated Technologies</label>
+                            <input
+                              type="text"
+                              value={build.technologies}
+                              onChange={(e) => {
+                                  const updated = [...publicPageData.buildSpecs];
+                                  updated[idx] = { ...updated[idx], technologies: e.target.value };
+                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                              }}
+                              className="w-full text-[11px] font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                            />
+                          </div>
+                          <div className="mt-3">
+                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Background Image URL</label>
+                            <input
+                              type="url"
+                              value={build.imageUrl || ""}
+                              placeholder="https://images.unsplash.com/photo-..."
+                              onChange={(e) => {
+                                  const updated = [...publicPageData.buildSpecs];
+                                  updated[idx] = { ...updated[idx], imageUrl: e.target.value };
+                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                              }}
+                              className="w-full text-[11px] font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION: TRACK RECORD & GOALS */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <Target className="size-4 text-purple-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">D. Team Performance Trajectory & Records</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newId = `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                      const updatedRecords = [...publicPageData.trackRecords, {
+                        id: newId,
+                        badge: "Immediate Targets",
+                        title: "Upcoming Project Goal",
+                        description: "Add details concerning targets and milestones.",
+                        statusTag: "TARGET ACTIVE"
+                      }];
+                      setPublicPageData({ ...publicPageData, trackRecords: updatedRecords });
+                    }}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-mono text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-sans"
+                  >
+                    <Plus className="size-3" /> Add Track Record
+                  </button>
+                </div>
+                <div className="p-6">
+                  {publicPageData.trackRecords.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/25 border border-dashed rounded-xl border-slate-300">
+                      No track records cataloged.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {publicPageData.trackRecords.map((tr, idx) => (
+                        <div key={`${tr.id}-${idx}`} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filtered = publicPageData.trackRecords.filter(t => t.id !== tr.id);
+                              setPublicPageData({ ...publicPageData, trackRecords: filtered });
+                            }}
+                            className="absolute top-4 right-4 text-slate-355 hover:text-red-500 transition-colors cursor-pointer"
+                            title="Delete Record"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Badge Category Tag</label>
+                              <input
+                                type="text"
+                                value={tr.badge}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.trackRecords];
+                                  updated[idx] = { ...updated[idx], badge: e.target.value };
+                                  setPublicPageData({ ...publicPageData, trackRecords: updated });
+                                }}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Milestone Title</label>
+                              <input
+                                type="text"
+                                value={tr.title}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.trackRecords];
+                                  updated[idx] = { ...updated[idx], title: e.target.value };
+                                  setPublicPageData({ ...publicPageData, trackRecords: updated });
+                                }}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Status Tag</label>
+                              <input
+                                type="text"
+                                value={tr.statusTag}
+                                onChange={(e) => {
+                                  const updated = [...publicPageData.trackRecords];
+                                  updated[idx] = { ...updated[idx], statusTag: e.target.value };
+                                  setPublicPageData({ ...publicPageData, trackRecords: updated });
+                                }}
+                                className="w-full text-xs font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="mt-3">
+                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Milestone Accomplishment Narrative Description</label>
+                            <textarea
+                              rows={2}
+                              value={tr.description}
+                              onChange={(e) => {
+                                const updated = [...publicPageData.trackRecords];
+                                updated[idx] = { ...updated[idx], description: e.target.value };
+                                  setPublicPageData({ ...publicPageData, trackRecords: updated });
+                              }}
+                              className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100 leading-normal"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Right side Sponsorship section Form Sidebar (4 Cols) */}
+            <div className="lg:col-span-4 space-y-6">
+              
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <HeartHandshake className="size-4 text-rose-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">E. Contact Us Settings</h3>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show Contact</span>
+                    <input 
+                      type="checkbox" 
+                      checked={publicPageData.showContactUs !== false}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, showContactUs: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500 relative"></div>
+                  </label>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Sponsorship Header Category</label>
+                    <input 
+                      type="text"
+                      value={publicPageData.sponsorHeader}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, sponsorHeader: e.target.value })}
+                      className="w-full text-xs font-medium px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Sponsorship Title Headline</label>
+                    <textarea 
+                      rows={2}
+                      value={publicPageData.sponsorTitle}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, sponsorTitle: e.target.value })}
+                      className="w-full text-xs font-bold px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">The Ask Header Title</label>
+                    <input 
+                      type="text"
+                      value={publicPageData.sponsorAskTitle}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, sponsorAskTitle: e.target.value })}
+                      className="w-full text-xs font-medium px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">The Ask Description Paragraph</label>
+                    <textarea 
+                      rows={4}
+                      value={publicPageData.sponsorAskDesc}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, sponsorAskDesc: e.target.value })}
+                      className="w-full text-xs p-4 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100 leading-relaxed font-sans"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">The Benefit Header Title</label>
+                    <input 
+                      type="text"
+                      value={publicPageData.sponsorBenefitTitle}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, sponsorBenefitTitle: e.target.value })}
+                      className="w-full text-xs font-medium px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">The Benefit Description Paragraph</label>
+                    <textarea 
+                      rows={4}
+                      value={publicPageData.sponsorBenefitDesc}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, sponsorBenefitDesc: e.target.value })}
+                      className="w-full text-xs p-4 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100 leading-relaxed font-sans"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Sponsorship Contact Email address</label>
+                    <input 
+                      type="email"
+                      value={publicPageData.contactEmail}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, contactEmail: e.target.value })}
+                      className="w-full text-xs font-mono px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: VISUAL GALLERY PHOTOS */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-850">
+                  <div className="flex items-center gap-2">
+                    <Image className="size-4 text-emerald-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">F. Team Photos Gallery</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newId = `photo-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                      const updatedPhotos = [...(publicPageData.galleryPhotos || []), {
+                        id: newId,
+                        url: "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&q=80&w=800",
+                        caption: "Axotic division robotics calibration pass."
+                      }];
+                      setPublicPageData({ ...publicPageData, galleryPhotos: updatedPhotos });
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-sans"
+                  >
+                    <Plus className="size-3" /> Add Photo
+                  </button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal">
+                    Curate engineering, division life, or robotic chassis pictures here.
+                  </p>
+
+                  {!(publicPageData.galleryPhotos && publicPageData.galleryPhotos.length > 0) ? (
+                    <div className="text-center py-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                      <p className="text-xs text-slate-400 italic">No gallery photos added yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+                      {publicPageData.galleryPhotos.map((photo, index) => (
+                        <div key={`${photo.id}-${index}`} className="p-3 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
+                          <div className="flex items-start gap-2">
+                            <div className="size-12 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-200/40">
+                              <img 
+                                src={photo.url || undefined} 
+                                alt="preview" 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&q=80&w=800";
+                                }}
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <input 
+                                type="text"
+                                placeholder="Image link URL"
+                                value={photo.url}
+                                onChange={(e) => {
+                                  const updated = [...(publicPageData.galleryPhotos || [])];
+                                  updated[index] = { ...photo, url: e.target.value };
+                                  setPublicPageData({ ...publicPageData, galleryPhotos: updated });
+                                }}
+                                className="w-full text-[10px] font-mono px-2 py-1 bg-white border border-slate-200 rounded dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100 focus:outline-hidden"
+                              />
+                              <input 
+                                type="text"
+                                placeholder="Caption"
+                                value={photo.caption || ""}
+                                onChange={(e) => {
+                                  const updated = [...(publicPageData.galleryPhotos || [])];
+                                  updated[index] = { ...photo, caption: e.target.value };
+                                  setPublicPageData({ ...publicPageData, galleryPhotos: updated });
+                                }}
+                                className="w-full text-[10px] px-2 py-1 bg-white border border-slate-200 rounded dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100 focus:outline-hidden"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const filtered = (publicPageData.galleryPhotos || []).filter(p => p.id !== photo.id);
+                                setPublicPageData({ ...publicPageData, galleryPhotos: filtered });
+                              }}
+                              className="text-slate-400 hover:text-rose-500 p-1 rounded-md hover:bg-rose-50 dark:hover:bg-slate-900 transition-colors"
+                              title="Delete Photo"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SAVE PREVIEW HELP BOX */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-2xl space-y-2">
+                <h5 className="text-[11px] font-bold text-[#0f2e46] dark:text-blue-300 uppercase tracking-wider font-mono">Real-time Deployment Sync</h5>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Clicking the <strong>Commit/Save Changes</strong> button updates Firestore configuration registers instantly or caches your changes in your offline mock local workspace automatically.
+                </p>
+              </div>
+
             </div>
 
           </div>

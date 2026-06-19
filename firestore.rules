@@ -5,142 +5,147 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
     function isSignedIn() {
       return request.auth != null;
-    }
-
-    function isEmailVerified() {
-      return isSignedIn() && (
-        ('email_verified' in request.auth.token && request.auth.token.email_verified == true) || 
-        ('firebase' in request.auth.token && request.auth.token.firebase.sign_in_provider == 'anonymous')
-      );
-    }
-
-    function isBootstrappedAdmin() {
-      return 'email' in request.auth.token && request.auth.token.email == 'genukakisara@gmail.com';
     }
 
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function hasUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && (
+        ('email' in request.auth.token && request.auth.token.email == 'genukakisara@gmail.com') ||
+        (hasUserDoc() && 'email' in getUserData() && getUserData().email == 'genukakisara@gmail.com')
+      );
+    }
+
     function isAdmin() {
       return isSignedIn() && (
         isBootstrappedAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+        (hasUserDoc() && 'role' in getUserData() && getUserData().role == 'admin')
       );
     }
 
     function isMember() {
       return isSignedIn() && (
         isBootstrappedAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         (getUserData().role == 'member' || getUserData().role == 'admin'))
+        (hasUserDoc() && 'role' in getUserData() && (getUserData().role == 'member' || getUserData().role == 'admin'))
       );
-    }
-
-    function isVerifiedMember() {
-      return isMember() && isEmailVerified();
-    }
-
-    function isVerifiedAdmin() {
-      return isAdmin() && isEmailVerified();
     }
 
     match /users/{userId} {
       allow read: if true;
-      allow create: if isEmailVerified() && (
+      allow create: if isSignedIn() && (
         (request.auth.uid == userId && (
-          request.resource.data.role == 'member' || isBootstrappedAdmin() || ('firebase' in request.auth.token && request.auth.token.firebase.sign_in_provider == 'anonymous')
+          ('role' in request.resource.data && request.resource.data.role == 'member') || 
+          isBootstrappedAdmin() || 
+          ('firebase' in request.auth.token && 'sign_in_provider' in request.auth.token.firebase && request.auth.token.firebase.sign_in_provider == 'anonymous')
         )) ||
-        isVerifiedAdmin()
+        isAdmin()
       );
-      allow update: if isEmailVerified() && (
+      allow update: if isSignedIn() && (
         (request.auth.uid == userId && 
-         request.resource.data.role == resource.data.role && 
+         'role' in request.resource.data && 'role' in resource.data && request.resource.data.role == resource.data.role && 
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'academicYear', 'subTeam', 'specifications', 'birthday', 'isOnline', 'lastActiveAt'])) ||
-        isVerifiedAdmin() ||
-        ('firebase' in request.auth.token && request.auth.token.firebase.sign_in_provider == 'anonymous')
+        isAdmin() ||
+        ('firebase' in request.auth.token && 'sign_in_provider' in request.auth.token.firebase && request.auth.token.firebase.sign_in_provider == 'anonymous')
       );
-      allow delete: if isVerifiedAdmin();
+      allow delete: if isAdmin();
     }
 
     match /projects/{projectId} {
       allow read: if true;
-      allow create: if isVerifiedMember() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isVerifiedMember() && (
-        isVerifiedAdmin() ||
-        (resource.data.status != 'Finished' && (
-          (request.auth.uid == resource.data.createdBy || request.auth.uid == resource.data.leaderId || request.auth.uid in resource.data.memberIds) &&
+      allow create: if isMember() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (('status' in resource.data && resource.data.status != 'Finished') && (
+          (request.auth.uid == resource.data.createdBy || request.auth.uid == resource.data.leaderId || ('memberIds' in resource.data && request.auth.uid in resource.data.memberIds)) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'status', 'leaderId', 'leaderName', 'memberIds', 'memberNames', 'deadline', 'startDate', 'kicadLink', 'updatedAt', 'budget', 'estimatedCost', 'costSplitType', 'memberCostSplits', 'budgetItems', 'sponsorFundings', 'memberContributions', 'peerTransfers'])
         ))
       );
-      allow delete: if isVerifiedAdmin() || (isVerifiedMember() && resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin() || (isMember() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
     }
 
     match /projects/{projectId}/logs/{logId} {
       allow read: if isSignedIn();
-      allow create: if isVerifiedMember() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isVerifiedMember() && (
-        isVerifiedAdmin() ||
-        (request.auth.uid == resource.data.authorId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content']))
+      allow create: if isMember() && ('authorId' in request.resource.data) && request.resource.data.authorId == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (('authorId' in resource.data) && request.auth.uid == resource.data.authorId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content']))
       );
-      allow delete: if isVerifiedAdmin();
+      allow delete: if isAdmin();
     }
 
     match /projects/{projectId}/hardware/{hardwareId} {
       allow read: if isSignedIn();
-      allow create: if isVerifiedMember() && request.resource.data.allocatedBy == request.auth.uid;
-      allow update: if isVerifiedMember() && (
-        isVerifiedAdmin() ||
-        (request.auth.uid == resource.data.allocatedBy && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']))
+      allow create: if isMember() && ('allocatedBy' in request.resource.data) && request.resource.data.allocatedBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (('allocatedBy' in resource.data) && request.auth.uid == resource.data.allocatedBy && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']))
       );
-      allow delete: if isVerifiedAdmin();
+      allow delete: if isAdmin();
     }
 
     match /inventory/{itemId} {
       allow read: if isSignedIn();
-      allow create: if isVerifiedMember();
-      allow update: if isVerifiedMember() && (
-        isVerifiedAdmin() ||
+      allow create: if isMember();
+      allow update: if isMember() && (
+        isAdmin() ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['availableQuantity', 'name', 'category', 'description', 'totalQuantity', 'location', 'specification'])
       );
-      allow delete: if isVerifiedMember() || isVerifiedAdmin();
+      allow delete: if isMember() || isAdmin();
     }
 
     match /categories/{categoryId} {
       allow read: if isSignedIn();
-      allow write: if isVerifiedAdmin();
+      allow write: if isAdmin();
     }
 
     match /ideas/{ideaId} {
       allow read: if isSignedIn();
-      allow create: if isVerifiedMember() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isVerifiedMember() && (
-        isVerifiedAdmin() ||
-        (resource.data.status != 'Promoted' && (
+      allow create: if isMember() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        (('status' in resource.data && resource.data.status != 'Promoted') && (
           request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'description', 'category', 'votes', 'votedIds', 'status', 'promotedProjectId', 'updatedAt', 'comments'])
         ))
       );
-      allow delete: if isVerifiedAdmin() || (isVerifiedMember() && resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin() || (isMember() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
     }
 
     match /notifications/{notificationId} {
       allow read: if isSignedIn();
-      allow create: if isVerifiedMember();
-      allow update: if isVerifiedMember();
-      allow delete: if isVerifiedAdmin() || (isSignedIn() && request.auth.uid == resource.data.createdBy);
+      allow create: if isMember();
+      allow update: if isMember();
+      allow delete: if isAdmin() || (isSignedIn() && ('createdBy' in resource.data) && request.auth.uid == resource.data.createdBy);
+    }
+
+    match /landing/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /admin_logs/{logId} {
-      allow read: if isVerifiedAdmin();
-      allow create: if isVerifiedAdmin();
-      allow update: if false; // Logs are immutable, write-once append-only
-      allow delete: if isVerifiedAdmin();
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /mail/{mailId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }

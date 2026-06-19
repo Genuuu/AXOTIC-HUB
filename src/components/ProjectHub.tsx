@@ -40,9 +40,29 @@ import {
   Coins,
   Search,
   Printer,
-  Download
+  Download,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, SponsorFunding, MemberContribution, PeerTransfer } from "../types";
+
+// Dynamic input preview formatter for high craftsmanship human error checks
+const formatInputPreview = (value: number): string => {
+  if (!value || isNaN(value)) return "0.00";
+  if (value >= 1_000_000_000_000) {
+    return `${(value / 1_000_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 3 })} Trillion`;
+  }
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 3 })} Billion`;
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 3 })} Million`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toLocaleString('en-US', { maximumFractionDigits: 2 })} Thousand`;
+  }
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 interface ProjectHubProps {
   currentUser: UserProfile;
@@ -56,6 +76,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectTab, setProjectTab] = useState<"ongoing" | "finished">("ongoing");
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   // Handle deep-linked selections from other components (like Home Tab)
   useEffect(() => {
@@ -1368,10 +1389,18 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 key={proj.id}
                 id={`project-card-${proj.id}`}
                 onClick={() => {
-                  setSelectedProject(proj);
-                  setWorkspaceTab("budget"); // Default to comprehensive cost spreadsheet tab
+                  if (window.innerWidth >= 768) {
+                    setSelectedProject(proj);
+                    setWorkspaceTab("budget"); // Default to comprehensive cost spreadsheet tab
+                  } else {
+                    setExpandedCardId(expandedCardId === proj.id ? null : proj.id);
+                  }
                 }}
-                className="bg-white rounded-xl border border-slate-200 hover:border-blue-500 shadow-xs hover:shadow-md hover:-translate-y-0.5 p-5 transition-all text-left relative overflow-hidden flex flex-col justify-between cursor-pointer group"
+                className={`bg-white rounded-xl border transition-all text-left relative overflow-hidden flex flex-col justify-between cursor-pointer group p-5
+                  ${expandedCardId === proj.id 
+                    ? "border-blue-500 shadow-md ring-2 ring-blue-500/10" 
+                    : "border-slate-200 hover:border-blue-500 shadow-xs hover:shadow-md hover:-translate-y-0.5"
+                  }`}
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2.5">
@@ -1391,34 +1420,51 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     </span>
                   </div>
                   
-                  {(isAdmin || proj.createdBy === currentUser.uid) && (
-                    <button
-                      title="Destructive Delete Project"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProject(proj.id);
-                      }}
-                      className="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md p-1.5 transition-all cursor-pointer"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Compact Interactive Accordion Indicators on Mobile */}
+                    <div className="md:hidden text-slate-400 group-hover:text-blue-500 transition-colors">
+                      {expandedCardId === proj.id ? (
+                        <ChevronUp className="size-4" />
+                      ) : (
+                        <ChevronDown className="size-4" />
+                      )}
+                    </div>
+
+                    {(isAdmin || proj.createdBy === currentUser.uid) && (
+                      <button
+                        title="Destructive Delete Project"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteProject(proj.id);
+                        }}
+                        className="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md p-1.5 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <h3 className="font-display text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors line-clamp-1">
                     {proj.title}
                   </h3>
-                  <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed pb-4">
+                  {/* On Mobile: show only if accordion card is expanded. On Desktop: always show. */}
+                  <p className={`text-xs text-slate-500 leading-relaxed md:block
+                    ${expandedCardId === proj.id ? "block pb-3" : "hidden md:line-clamp-2 pb-4"}`}
+                  >
                     {proj.description || "No description provided. Click to add detailed logistics plans and spreadsheet items."}
                   </p>
                 </div>
 
-                <div className="border-t border-slate-100 pt-3 flex flex-wrap gap-2 items-center justify-between text-[11px] text-slate-400 font-sans">
+                {/* Technical specs block: Show always on Desktop; on Mobile show only if card is expanded */}
+                <div className={`border-t border-slate-100 pt-3 flex-wrap gap-2 items-center justify-between text-[11px] text-slate-400 font-sans md:flex
+                  ${expandedCardId === proj.id ? "flex" : "hidden"}`}
+                >
                   <span className="flex items-center gap-1 text-slate-600">
                     <User className="size-3.5 text-slate-400" /> Lead: <strong className="text-slate-700 font-medium">{proj.leaderName}</strong>
                   </span>
-                  <div className="flex flex-wrap gap-1.5 items-center ml-auto shrink-0 font-mono text-[10px] text-slate-500">
+                  <div className="flex flex-wrap gap-1.5 items-center sm:ml-auto shrink-0 font-mono text-[10px] text-slate-500 mt-2 sm:mt-0">
                     {proj.startDate && (
                       <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5" title="Started Date">
                         <span className="text-[8.5px] uppercase font-semibold text-slate-400">Started:</span> {proj.startDate}
@@ -1435,6 +1481,22 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     )}
                   </div>
                 </div>
+
+                {/* Enter Project Workspace CTA Button (only visible on mobile when expanded) */}
+                {expandedCardId === proj.id && (
+                  <motion.button
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedProject(proj);
+                      setWorkspaceTab("budget");
+                    }}
+                    className="md:hidden mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-xs hover:shadow-md transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ExternalLink className="size-3.5" /> OPEN SECURE WORKSPACE
+                  </motion.button>
+                )}
               </div>
             ))
           )}
@@ -1816,6 +1878,35 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 URL.revokeObjectURL(url);
               };
 
+              // Solution for very long budget / estimate numbers in active project:
+              // Abbreviate if extremely large with proper exact title on hover, and scale font size down.
+              const formatShortOption = (val: number, decimalsAllowed = true) => {
+                if (val >= 1_000_000_000_000) {
+                  return `${(val / 1_000_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}T`;
+                }
+                if (val >= 1_000_000_000) {
+                  return `${(val / 1_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}B`;
+                }
+                if (val >= 1_000_000) {
+                  return `${(val / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}M`;
+                }
+                if (val >= 100_000) {
+                  return `${(val / 1_000).toLocaleString('en-US', { maximumFractionDigits: 1 })}K`;
+                }
+                return val.toLocaleString('en-US', { 
+                  minimumFractionDigits: decimalsAllowed ? 2 : 0, 
+                  maximumFractionDigits: decimalsAllowed ? 2 : 2 
+                });
+              };
+
+              const getDynamicFontSizeClass = (value: number) => {
+                const len = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).length;
+                if (len > 18) return "text-[11px] sm:text-xs md:text-sm";
+                if (len > 13) return "text-xs sm:text-sm md:text-base";
+                if (len > 9) return "text-sm sm:text-base md:text-lg";
+                return "text-base sm:text-lg md:text-xl";
+              };
+
               return (
                 <div className="space-y-6">
                   {/* Ledger summary banner */}
@@ -1837,7 +1928,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                             : "bg-slate-100 text-slate-500 border-slate-205"
                       }`}>
                         {isOverBudget 
-                          ? `Over budget limit by LKR ${(costVal - budgetVal).toFixed(2)}` 
+                          ? `Over budget limit by LKR ${(costVal - budgetVal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
                           : budgetVal > 0 
                             ? "Within Budget" 
                             : "Budget Cap Not Configured"}
@@ -1868,34 +1959,52 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
 
                   {/* Highlights row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-sans">Total Project Budget</div>
-                      <div className="text-xl font-bold text-slate-800 font-mono mt-0.5 font-semibold">
-                        LKR {budgetVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 min-w-0 flex flex-col justify-end">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-sans truncate">Total Project Budget</div>
+                      <div 
+                        className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-slate-800 ${getDynamicFontSizeClass(budgetVal)}`}
+                        title={`Exact Budget limit: LKR ${budgetVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      >
+                        LKR {formatShortOption(budgetVal, budgetVal < 100_000)}
                       </div>
                     </div>
-                    <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Total Cost Sum (Spreadsheet)</div>
-                      <div className="text-xl font-bold text-slate-850 font-mono mt-0.5 font-semibold">
-                        LKR {costVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    
+                    <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 min-w-0 flex flex-col justify-end">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">Total Cost Sum (Spreadsheet)</div>
+                      <div 
+                        className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-slate-850 ${getDynamicFontSizeClass(costVal)}`}
+                        title={`Exact spreadsheet items value: LKR ${costVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      >
+                        LKR {formatShortOption(costVal, costVal < 100_000)}
                       </div>
                     </div>
-                    <div className="bg-emerald-50/20 p-4 rounded-xl border border-emerald-100/60">
-                      <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">Sponsor Funding (Inbound)</div>
-                      <div className="text-xl font-bold text-emerald-700 font-mono mt-0.5 font-black">
-                        LKR {sponsorTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    
+                    <div className="bg-emerald-50/20 p-4 rounded-xl border border-emerald-100/60 min-w-0 flex flex-col justify-end">
+                      <div className="text-[10px] text-emerald-605 font-bold uppercase tracking-widest truncate">Sponsor Funding (Inbound)</div>
+                      <div 
+                        className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-emerald-700 transition-all ${getDynamicFontSizeClass(sponsorTotal)}`}
+                        title={`Exact Sponsor fundings: LKR ${sponsorTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      >
+                        LKR {formatShortOption(sponsorTotal, sponsorTotal < 100_000)}
                       </div>
                     </div>
-                    <div className="bg-blue-50/20 p-4 rounded-xl border border-blue-100/60">
-                      <div className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Member Contributions</div>
-                      <div className="text-xl font-bold text-blue-700 font-mono mt-0.5 font-black">
-                        LKR {contributionTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    
+                    <div className="bg-blue-50/20 p-4 rounded-xl border border-blue-100/60 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] text-blue-605 font-bold uppercase tracking-widest truncate">Member Contributions</div>
+                        <div 
+                          className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-blue-700 transition-all ${getDynamicFontSizeClass(contributionTotal)}`}
+                          title={`Exact member contributions: LKR ${contributionTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        >
+                          LKR {formatShortOption(contributionTotal, contributionTotal < 100_000)}
+                        </div>
                       </div>
-                      <div className="text-[8px] text-slate-400 mt-1 font-sans">
-                        Reimbursable: LKR {memberReimbursableTotal.toFixed(0)} | Donations: LKR {memberDonationsTotal.toFixed(0)}
+                      <div className="text-[8.5px] text-slate-400 mt-1 font-sans truncate select-none" title={`Reimbursable: LKR ${memberReimbursableTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} | Donations: LKR ${memberDonationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}>
+                        Reimbursable: LKR {formatShortOption(memberReimbursableTotal, false)} | Donations: LKR {formatShortOption(memberDonationsTotal, false)}
                       </div>
                     </div>
-                    <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 flex flex-col justify-center">
+                    
+                    <div className="bg-slate-50/40 p-4 rounded-xl border border-slate-200/60 min-w-0 flex flex-col justify-end">
                       <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 font-semibold">Consumption</div>
                       {budgetVal > 0 ? (
                         <div>
@@ -1905,9 +2014,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               style={{ width: `${Math.min(100, percentOfBudget)}%` }}
                             />
                           </div>
-                          <div className="flex justify-between text-[9px] font-mono text-slate-500">
-                            <span>{percentOfBudget.toFixed(1)}% consumed</span>
-                            <span>LKR {Math.max(0, budgetVal - costVal).toLocaleString('en-US', { maximumFractionDigits: 2 })} remaining</span>
+                          <div className="flex justify-between text-[9px] font-mono text-slate-500 gap-1">
+                            <span className="truncate shrink-0">{percentOfBudget.toFixed(1)}% consumed</span>
+                            <span className="truncate" title={`Exactly remaining: LKR ${(budgetVal - costVal).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}>
+                              LKR {formatShortOption(Math.max(0, budgetVal - costVal), false)} rem
+                            </span>
                           </div>
                         </div>
                       ) : (
@@ -1945,7 +2056,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                             </tr>
                           ) : (
                             items.map((it, idx) => (
-                              <tr key={it.id} className="hover:bg-slate-50/50 transition-colors">
+                              <tr key={`${it.id}-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="p-3 font-mono text-slate-400 border-r border-slate-200 text-[10px] text-center select-none">{idx + 1}</td>
                                 <td className="p-3 font-medium text-slate-800 border-r border-slate-200 pr-4">{it.name}</td>
                                 <td className="p-3 font-mono text-right border-r border-slate-200 pr-4">
@@ -2095,8 +2206,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                           No external sponsor funding logged yet. Add sources below to offset member expense allocations!
                         </div>
                       ) : (
-                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                          <table className="w-full text-left border-collapse text-xs">
+                        <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto shadow-2xs">
+                          <table className="w-full text-left border-collapse min-w-[500px] sm:min-w-0 text-xs">
                             <thead>
                               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[9px] tracking-wider select-none">
                                 <th className="p-2.5">Sponsor / Grant Entity</th>
@@ -2106,8 +2217,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150">
-                              {sponsors.map((s) => (
-                                <tr key={s.id} className="hover:bg-slate-50/40">
+                              {sponsors.map((s, idx) => (
+                                <tr key={`${s.id}-${idx}`} className="hover:bg-slate-50/40">
                                   <td className="p-2.5 font-bold text-slate-800">{s.sponsorName}</td>
                                   <td className="p-2.5 text-slate-500 italic">{s.notes || "-"}</td>
                                   <td className="p-2.5 font-mono text-right font-black text-emerald-600">
@@ -2234,8 +2345,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                           No direct member cash contributions logged yet. Record entries below to credit members for direct financial deposits!
                         </div>
                       ) : (
-                        <div className="bg-white border border-slate-150 rounded-lg overflow-hidden shadow-2xs">
-                          <table className="w-full text-left border-collapse text-xs">
+                        <div className="bg-white border border-slate-150 rounded-lg overflow-x-auto shadow-2xs">
+                          <table className="w-full text-left border-collapse min-w-[500px] sm:min-w-0 text-xs">
                             <thead>
                               <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase text-[9px] tracking-wider select-none">
                                 <th className="p-2.5">Contributor Member</th>
@@ -2246,8 +2357,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150">
-                              {contributions.map((c) => (
-                                <tr key={c.id} className="hover:bg-slate-50/40">
+                              {contributions.map((c, idx) => (
+                                <tr key={`${c.id}-${idx}`} className="hover:bg-slate-50/40">
                                   <td className="p-2.5">
                                     <div className="flex items-center gap-1.5">
                                       <span className="font-bold text-slate-800">{getParticipantName(c.memberId)}</span>
@@ -2419,8 +2530,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                           No peer-to-peer payments logged yet. Fill out fields below to record cash or direct transfers.
                         </div>
                       ) : (
-                        <div className="bg-white border border-slate-150 rounded-lg overflow-hidden shadow-2xs">
-                          <table className="w-full text-left border-collapse text-xs">
+                        <div className="bg-white border border-slate-150 rounded-lg overflow-x-auto shadow-2xs">
+                          <table className="w-full text-left border-collapse min-w-[500px] sm:min-w-0 text-xs">
                             <thead>
                               <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase text-[9px] tracking-wider select-none">
                                 <th className="p-2.5">Payer (From)</th>
@@ -2432,8 +2543,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150">
-                              {peerTransfers.map((pt) => (
-                                <tr key={pt.id} className="hover:bg-slate-50/40">
+                              {peerTransfers.map((pt, idx) => (
+                                <tr key={`${pt.id}-${idx}`} className="hover:bg-slate-50/40">
                                   <td className="p-2.5">
                                     <div className="flex items-center gap-1">
                                       <span className="font-bold text-slate-800">{getParticipantName(pt.fromMemberId)}</span>
@@ -2689,7 +2800,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                           </p>
                           <div className="space-y-1.5 max-h-[150px] overflow-y-auto w-full pr-1">
                             {settlements.map((tx, idx) => (
-                              <div key={idx} className="bg-white border border-slate-200 px-3 py-2 rounded-lg flex items-center justify-between text-xs">
+                              <div key={`settlement-tr-${tx.from}-${tx.to}-${tx.amount}-${idx}`} className="bg-white border border-slate-200 px-3 py-2 rounded-lg flex items-center justify-between text-xs">
                                 <span className="font-medium text-slate-700">
                                   💵 <strong className="text-slate-900">{tx.from}</strong> needs to transfer money directly to <strong className="text-slate-900">{tx.to}</strong>
                                 </span>
@@ -2707,7 +2818,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   {/* PRINTABLE / SUMMARY REPORT OVERLAY MODAL */}
                   <AnimatePresence>
                     {showPrintModal && (
-                      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto no-print">
+                      <div key="print-modal-overlay" className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto no-print">
                         <motion.div
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
@@ -2799,7 +2910,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               {items.length === 0 ? (
                                 <p className="text-xs text-slate-400 italic">No expense items logged.</p>
                               ) : (
-                                <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                  <table className="w-full text-[11px] text-left border-collapse min-w-[550px]">
                                   <thead>
                                     <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
                                       <th className="p-2 border-r border-slate-200">Item Name</th>
@@ -2810,8 +2922,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-150">
-                                    {items.map((it) => (
-                                      <tr key={it.id}>
+                                    {items.map((it, idx) => (
+                                      <tr key={`${it.id}-${idx}`}>
                                         <td className="p-2 border-r border-slate-150 font-bold text-slate-805">{it.name}</td>
                                         <td className="p-2 border-r border-slate-150">{getParticipantName(it.paidById)}</td>
                                         <td className="p-2 text-right border-r border-slate-150 font-mono">
@@ -2825,8 +2937,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                     ))}
                                   </tbody>
                                 </table>
-                              )}
-                            </div>
+                              </div>
+                            )}
+                          </div>
 
                             {/* Section 2: Sponsor & Direct Contributions */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
@@ -2837,7 +2950,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                 {sponsors.length === 0 ? (
                                   <p className="text-xs text-slate-400 italic">No external sponsor funding logged.</p>
                                 ) : (
-                                  <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                    <table className="w-full text-[11px] text-left border-collapse min-w-[450px]">
                                     <thead>
                                       <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
                                         <th className="p-2 border-r border-slate-200">Sponsor Name</th>
@@ -2846,8 +2960,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-150">
-                                      {sponsors.map((s) => (
-                                        <tr key={s.id}>
+                                      {sponsors.map((s, idx) => (
+                                        <tr key={`${s.id}-${idx}`}>
                                           <td className="p-2 border-r border-slate-150 font-bold">{s.sponsorName}</td>
                                           <td className="p-2 border-r border-slate-150 text-slate-500 italic">{s.notes || "-"}</td>
                                           <td className="p-2 text-right font-mono font-bold text-emerald-600">
@@ -2857,8 +2971,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                       ))}
                                     </tbody>
                                   </table>
-                                )}
-                              </div>
+                                </div>
+                              )}
+                            </div>
 
                               <div className="space-y-2">
                                 <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
@@ -2867,7 +2982,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                 {contributions.length === 0 ? (
                                   <p className="text-xs text-slate-400 italic">No member contributions logged.</p>
                                 ) : (
-                                  <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                    <table className="w-full text-[11px] text-left border-collapse min-w-[450px]">
                                     <thead>
                                       <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
                                         <th className="p-2 border-r border-slate-200">Member Name</th>
@@ -2876,8 +2992,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-150">
-                                      {contributions.map((c) => (
-                                        <tr key={c.id}>
+                                      {contributions.map((c, idx) => (
+                                        <tr key={`${c.id}-${idx}`}>
                                           <td className="p-2 border-r border-slate-150 font-bold">{getParticipantName(c.memberId)}</td>
                                           <td className="p-2 border-r border-slate-150 text-[10px]">
                                             {c.type === "reimbursable" ? "Reimbursable Split" : "Donation offset"}
@@ -2889,8 +3005,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                       ))}
                                     </tbody>
                                   </table>
-                                )}
-                              </div>
+                                </div>
+                              )}
+                            </div>
                             </div>
 
                             {/* Section 3: Cost Splits and Balances */}
@@ -2898,7 +3015,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
                                 4. Member Spent Credits and Divided Shares
                               </h3>
-                              <table className="w-full text-[11px] text-left border-collapse border border-slate-200">
+                              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                <table className="w-full text-[11px] text-left border-collapse min-w-[550px]">
                                 <thead>
                                   <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
                                     <th className="p-2 border-r border-slate-200">Project Member</th>
@@ -2938,6 +3056,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                 </tbody>
                               </table>
                             </div>
+                          </div>
 
                             {/* Section 4: Recommended Settlements */}
                             <div className="space-y-2 text-left bg-slate-50 p-4.5 rounded-xl border border-slate-200">
@@ -2949,7 +3068,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               ) : (
                                 <div className="space-y-1.5">
                                   {settlements.map((tx, index) => (
-                                    <div key={index} className="text-xs flex justify-between items-center bg-white border border-slate-150 px-3 py-1.5 rounded-md">
+                                    <div key={`settlement-rpt-${tx.from}-${tx.to}-${tx.amount}-${index}`} className="text-xs flex justify-between items-center bg-white border border-slate-150 px-3 py-1.5 rounded-md">
                                       <span className="text-slate-700">
                                         👉 <strong className="text-slate-900">{tx.from}</strong> pays directly to <strong className="text-slate-900">{tx.to}</strong>
                                       </span>
@@ -3040,8 +3159,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     No parts checked out to this workstation yet. Allocate stock parts below to solder them to this build shield!
                   </div>
                 ) : (
-                  allocatedHardware.map((hw) => (
-                    <div key={hw.id} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between hover:border-slate-350 transition-colors">
+                  allocatedHardware.map((hw, idx) => (
+                    <div key={`${hw.id}-${idx}`} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between hover:border-slate-350 transition-colors">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-800">{hw.name}</span>
                         <div className="flex items-center space-x-1.5">
@@ -3110,8 +3229,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     No engineering log reports submitted. Draft the first subassembly report below!
                   </div>
                 ) : (
-                  projectLogs.map((log) => (
-                    <div key={log.id} className="bg-white p-3.5 rounded-xl border border-slate-200 text-[11px] leading-relaxed relative hover:border-slate-350 transition-colors">
+                  projectLogs.map((log, idx) => (
+                    <div key={`${log.id}-${idx}`} className="bg-white p-3.5 rounded-xl border border-slate-200 text-[11px] leading-relaxed relative hover:border-slate-350 transition-colors">
                       <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono mb-1.5 pb-1 border-b border-slate-50">
                         <span className="font-sans font-extrabold text-slate-650">{log.authorName}</span>
                         <span>{new Date(log.createdAt).toLocaleString()}</span>
@@ -3279,6 +3398,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       value={newBudget}
                       onChange={(e) => setNewBudget(e.target.value)}
                     />
+                    {newBudget && !isNaN(parseFloat(newBudget)) && (
+                      <div className="text-[10px] text-emerald-600 font-medium font-sans mt-1 bg-emerald-50/50 border border-emerald-100/40 rounded px-1.5 py-0.5 inline-block">
+                        Preview: LKR {formatInputPreview(parseFloat(newBudget))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Estimated Project Cost (LKR)</label>
@@ -3290,6 +3414,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       value={newEstimatedCost}
                       onChange={(e) => setNewEstimatedCost(e.target.value)}
                     />
+                    {newEstimatedCost && !isNaN(parseFloat(newEstimatedCost)) && (
+                      <div className="text-[10px] text-blue-600 font-medium font-sans mt-1 bg-blue-50/50 border border-blue-100/40 rounded px-1.5 py-0.5 inline-block">
+                        Preview: LKR {formatInputPreview(parseFloat(newEstimatedCost))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -3509,6 +3638,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       value={editBudget}
                       onChange={(e) => setEditBudget(e.target.value)}
                     />
+                    {editBudget && !isNaN(parseFloat(editBudget)) && (
+                      <div className="text-[10px] text-emerald-600 font-medium font-sans mt-1 bg-emerald-50/50 border border-emerald-100/40 rounded px-1.5 py-0.5 inline-block">
+                        Preview: LKR {formatInputPreview(parseFloat(editBudget))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Estimated Project Cost (LKR)</label>
@@ -3520,6 +3654,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       value={editEstimatedCost}
                       onChange={(e) => setEditEstimatedCost(e.target.value)}
                     />
+                    {editEstimatedCost && !isNaN(parseFloat(editEstimatedCost)) && (
+                      <div className="text-[10px] text-blue-600 font-medium font-sans mt-1 bg-blue-50/50 border border-blue-100/40 rounded px-1.5 py-0.5 inline-block">
+                        Preview: LKR {formatInputPreview(parseFloat(editEstimatedCost))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -3556,23 +3695,23 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-bold text-slate-650 uppercase tracking-wider">Individual Shares (LKR)</span>
                       <span className={`text-[10px] font-mono font-bold ${
-                        Math.abs(Object.values(newMemberCostSplits).reduce((a, b) => a + b, 0) - (parseFloat(newEstimatedCost) || 0)) < 0.01
+                        Math.abs(Object.values(editMemberCostSplits).reduce((a, b) => a + b, 0) - (parseFloat(editEstimatedCost) || 0)) < 0.01
                           ? "text-emerald-600"
                           : "text-amber-600"
                       }`}>
-                        Sum: LKR {Object.values(newMemberCostSplits).reduce((a, b) => a + b, 0).toFixed(2)} / ${(parseFloat(newEstimatedCost) || 0).toFixed(2)}
+                        Sum: LKR {Object.values(editMemberCostSplits).reduce((a, b) => a + b, 0).toFixed(2)} / ${(parseFloat(editEstimatedCost) || 0).toFixed(2)}
                       </span>
                     </div>
                     <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
-                      {Array.from(new Set([newLeaderId, ...newMemberIds])).filter(Boolean).map((uid) => {
+                      {Array.from(new Set([editLeaderId, ...editMemberIds])).filter(Boolean).map((uid) => {
                         const matchedU = roster.find(u => u.uid === uid) || (uid === currentUser.uid ? currentUser : null);
                         if (!matchedU) return null;
-                        const userVal = newMemberCostSplits[uid] || 0;
+                        const userVal = editMemberCostSplits[uid] || 0;
                         return (
                           <div key={uid} className="flex items-center justify-between gap-3 text-xs">
                             <span className="truncate font-medium text-slate-655 flex items-center gap-1">
                               {matchedU.displayName} 
-                              {uid === newLeaderId && <span className="text-[8px] bg-blue-100 text-blue-800 px-1 rounded uppercase font-bold shrink-0">Lead</span>}
+                              {uid === editLeaderId && <span className="text-[8px] bg-blue-100 text-blue-800 px-1 rounded uppercase font-bold shrink-0">Lead</span>}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
                               <span className="font-mono text-slate-450 text-[10px]">LKR</span>
@@ -3834,6 +3973,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       <AnimatePresence>
         {selectedProjectIds.length > 0 && (
           <motion.div
+            key="floating-bulk-actions"
             initial={{ opacity: 0, y: 50, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.95 }}
@@ -3900,6 +4040,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
             <AnimatePresence>
               {(bulkActionSuccess || bulkActionError) && (
                 <motion.div
+                  key="action-feedback"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}

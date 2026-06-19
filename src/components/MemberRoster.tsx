@@ -383,7 +383,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                       <div className="relative">
                         <img
                           referrerPolicy="no-referrer"
-                          src={member.avatarUrl}
+                          src={member.avatarUrl || undefined}
                           alt={member.displayName}
                           className="size-12 rounded-xl border-2 border-white shadow-md bg-slate-100 shrink-0 object-cover"
                         />

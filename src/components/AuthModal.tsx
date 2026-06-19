@@ -4,7 +4,8 @@ import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { Shield, Sparkles, X, Mail, ArrowRight, Key } from "lucide-react";
 import { UserRole, UserProfile } from "../types";
-import logoUrl from "../../Images/Logo.png";
+import defaultLogoUrl from "../../Images/Logo.png";
+import { useWorkspaceSettings } from "../useWorkspaceSettings";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -17,6 +18,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
   const [errorText, setErrorText] = useState("");
   const [devMode, setDevMode] = useState(false);
   const [fallbackEmail, setFallbackEmail] = useState("");
+  
+  const { logoUrl: remoteLogoUrl } = useWorkspaceSettings();
+  const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
 
   if (!isOpen) return null;
 
@@ -223,7 +227,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           
           <div className="flex items-center gap-3.5 mb-2.5">
             <img 
-              src={logoUrl} 
+              src={activeLogoUrl || undefined} 
               alt="AXOTIC Logo" 
               className="h-7 object-contain" 
               referrerPolicy="no-referrer"

@@ -22,8 +22,19 @@ import {
   Sparkles,
   Tag
 } from "lucide-react";
-import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus } from "../types";
+import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, AllocatedHardware } from "../types";
 import TagInput from "./TagInput";
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip as ChartTooltip, 
+  Cell, 
+  PieChart, 
+  Pie 
+} from "recharts";
 
 interface HomeDashboardProps {
   currentUser: UserProfile;
@@ -33,9 +44,57 @@ interface HomeDashboardProps {
   onOpenEditProfile: () => void;
 }
 
+// Visual color palette for charts
+const COLORS = [
+  "#2563eb", // blue-600
+  "#8b5cf6", // violet-500
+  "#06b6d4", // cyan-500
+  "#3b82f6", // blue-500
+  "#84cc16", // lime-500
+  "#10b981", // emerald-500
+  "#f59e0b", // amber-500
+  "#ec4899", // pink-500
+  "#f43f5e", // rose-500
+];
+
+// Rich Custom Tooltip component for part allocation breakdown
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-750 text-white p-3.5 rounded-xl shadow-lg text-[11px] max-w-xs space-y-2 text-left z-50">
+        <div>
+          <span className="font-extrabold text-[8.5px] bg-blue-500/15 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider">
+            {data.category}
+          </span>
+        </div>
+        <div className="font-bold text-slate-100 text-xs leading-tight">{data.name}</div>
+        <div className="flex items-center gap-1.5 text-slate-350 border-t border-slate-800/60 pt-1.5">
+          <span>Assigned Quantity:</span>
+          <span className="font-mono font-black text-emerald-400 text-xs">{data.quantity} units</span>
+        </div>
+        {data.projects && Object.keys(data.projects).length > 0 && (
+          <div className="border-t border-slate-800 pt-1.5 space-y-1">
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Active Workspace Sharing:</div>
+            {Object.entries<number>(data.projects).map(([projTitle, qty]) => (
+              <div key={projTitle} className="flex justify-between items-center gap-4 text-[10px] text-slate-300">
+                <span className="truncate max-w-[150px]" title={projTitle}>{projTitle}</span>
+                <span className="font-mono font-bold text-slate-100">{qty} unit{qty > 1 ? 's' : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function HomeDashboard({ currentUser, roster, projectsList, onNavigate, onOpenEditProfile }: HomeDashboardProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [allLogs, setAllLogs] = useState<ProjectLog[]>([]);
+  const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
+  const [chartView, setChartView] = useState<"parts" | "categories">("parts");
 
   // 1. Fetch live stockroom parameters
   useEffect(() => {
@@ -132,12 +191,176 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
     }
   }, [projectsList, currentUser.isOfflineMock]);
 
+  // 3. Fetch live active stockroom hardware allocation matrices recursively
+  useEffect(() => {
+    if (projectsList.length === 0) {
+      setAllAllocations({});
+      return;
+    }
+
+    if (currentUser.isOfflineMock) {
+      const aggregateMockHardware = () => {
+        const aggregated: { [projectId: string]: AllocatedHardware[] } = {};
+        
+        const projectsWithMockHw = [
+          {
+            id: "mock-proj-1",
+            hardware: [
+              {
+                id: "hw-motor",
+                name: "NEMA 17 Stepper Motor High Torque",
+                category: "Hardware",
+                quantity: 4,
+                allocatedBy: "mock-bob",
+                allocatedByName: "Bob Axel",
+                allocatedAt: new Date(Date.now() - 3600000 * 24 * 12).toISOString()
+              },
+              {
+                id: "hw-extrusion",
+                name: "Aluminum Extrusions Profile 2020",
+                category: "Hardware",
+                quantity: 8,
+                allocatedBy: "mock-bob",
+                allocatedByName: "Bob Axel",
+                allocatedAt: new Date(Date.now() - 3600000 * 24 * 12).toISOString()
+              }
+            ]
+          },
+          {
+            id: "mock-proj-2",
+            hardware: [
+              {
+                id: "hw-esp32",
+                name: "ESP32-WROOM-32E Dev Board",
+                category: "Microcontrollers",
+                quantity: 3,
+                allocatedBy: "mock-genu",
+                allocatedByName: "Genu Kakisara (Lead)",
+                allocatedAt: new Date(Date.now() - 3600000 * 24 * 14).toISOString()
+              },
+              {
+                id: "hw-lidar",
+                name: "LIDAR Sensor Node v2",
+                category: "Sensors",
+                quantity: 2,
+                allocatedBy: "mock-genu",
+                allocatedByName: "Genu Kakisara (Lead)",
+                allocatedAt: new Date(Date.now() - 3600000 * 24 * 10).toISOString()
+              }
+            ]
+          },
+          {
+            id: "mock-proj-3",
+            hardware: [
+              {
+                id: "hw-pcb",
+                name: "Double sided Custom Copper PCB Shield",
+                category: "Electrical",
+                quantity: 5,
+                allocatedBy: "mock-sarah",
+                allocatedByName: "Sarah Connor",
+                allocatedAt: new Date(Date.now() - 3600000 * 24 * 4).toISOString()
+              },
+              {
+                id: "hw-buck",
+                name: "Power Buck Converter 5V",
+                category: "Electrical",
+                quantity: 6,
+                allocatedBy: "mock-sarah",
+                allocatedByName: "Sarah Connor",
+                allocatedAt: new Date(Date.now() - 3600000 * 24 * 3).toISOString()
+              }
+            ]
+          }
+        ];
+
+        let updatedAny = false;
+        projectsList.forEach(p => {
+          const hwKey = `axotic_mock_hardware_${p.id}`;
+          let stored = localStorage.getItem(hwKey);
+          if (!stored) {
+            const seedConfig = projectsWithMockHw.find(item => item.id === p.id);
+            if (seedConfig) {
+              localStorage.setItem(hwKey, JSON.stringify(seedConfig.hardware));
+              stored = JSON.stringify(seedConfig.hardware);
+              updatedAny = true;
+            }
+          }
+          if (stored) {
+            try {
+              aggregated[p.id] = JSON.parse(stored);
+            } catch (_) {
+              aggregated[p.id] = [];
+            }
+          } else {
+            aggregated[p.id] = [];
+          }
+        });
+
+        setAllAllocations(aggregated);
+        if (updatedAny) {
+          window.dispatchEvent(new Event("axotic_db_update"));
+        }
+      };
+
+      aggregateMockHardware();
+      window.addEventListener("axotic_db_update", aggregateMockHardware);
+      return () => window.removeEventListener("axotic_db_update", aggregateMockHardware);
+    } else {
+      const unsubscribers: (() => void)[] = [];
+      const tempAllocations: { [projectId: string]: AllocatedHardware[] } = {};
+
+      const updateState = () => {
+        setAllAllocations({ ...tempAllocations });
+      };
+
+      projectsList.forEach((p) => {
+        const hwQuery = query(collection(db, "projects", p.id, "hardware"));
+        const unsub = onSnapshot(hwQuery, (snapshot) => {
+          const projectHwList: AllocatedHardware[] = [];
+          snapshot.forEach((docSnap) => {
+            projectHwList.push({ id: docSnap.id, ...docSnap.data() } as AllocatedHardware);
+          });
+          tempAllocations[p.id] = projectHwList;
+          updateState();
+        }, (err) => {
+          console.warn(`Firestore hardware stream skipped for project ${p.id}`, err instanceof Error ? err.message : String(err));
+        });
+        unsubscribers.push(unsub);
+      });
+
+      return () => {
+        unsubscribers.forEach(unsub => unsub());
+      };
+    }
+  }, [projectsList, currentUser.isOfflineMock]);
+
   // Determine dynamic time greeting
   const getGreeting = () => {
     const hours = new Date().getHours();
     if (hours < 12) return "Good morning";
     if (hours < 18) return "Good afternoon";
     return "Good evening";
+  };
+
+  // Solution for very long budget / estimated cost values: abbreviate beautifully while offering an exact tooltip on hover
+  const formatShortLKR = (val: number, includeDecimals = false) => {
+    if (val >= 1_000_000_000_000) {
+      return `${(val / 1_000_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}T`;
+    }
+    if (val >= 1_000_000_000) {
+      return `${(val / 1_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}B`;
+    }
+    if (val >= 1_000_000) {
+      return `${(val / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 2 })}M`;
+    }
+    if (val >= 100_000) {
+      return `${(val / 1_000).toLocaleString('en-US', { maximumFractionDigits: 1 })}K`;
+    }
+    return val.toLocaleString('en-US', { 
+      minimumFractionDigits: includeDecimals ? 2 : 0, 
+      maximumFractionDigits: includeDecimals ? 2 : 0 
+    });
   };
 
   // Stat computations
@@ -149,6 +372,53 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
   const totalBudgetLimit = projectsList.reduce((sum, p) => sum + (p.budget || 0), 0);
   const lowStockItems = inventory.filter(item => item.availableQuantity <= 5);
   const myProjects = projectsList.filter(p => p.leaderId === currentUser.uid || (p.memberIds && p.memberIds.includes(currentUser.uid)));
+
+  // Aggregate current assignments of stockroom parts to active projects
+  const partUsageMap: { 
+    [partName: string]: { 
+      quantity: number; 
+      category: string; 
+      projects: { [projectTitle: string]: number } 
+    } 
+  } = {};
+
+  const categoryUsageMap: { [category: string]: number } = {};
+
+  ongoingProjects.forEach(proj => {
+    const list = allAllocations[proj.id] || [];
+    list.forEach(item => {
+      const name = item.name;
+      const qty = item.quantity || 0;
+      const category = item.category || "General";
+      
+      // Group by Part Name
+      if (!partUsageMap[name]) {
+        partUsageMap[name] = { quantity: 0, category, projects: {} };
+      }
+      partUsageMap[name].quantity += qty;
+      partUsageMap[name].projects[proj.title] = (partUsageMap[name].projects[proj.title] || 0) + qty;
+
+      // Group by Category
+      categoryUsageMap[category] = (categoryUsageMap[category] || 0) + qty;
+    });
+  });
+
+  const partChartData = Object.entries(partUsageMap).map(([name, info]) => ({
+    name,
+    quantity: info.quantity,
+    category: info.category,
+    projects: info.projects,
+    shortName: name.length > 15 ? name.substring(0, 13) + "..." : name
+  })).filter(d => d.quantity > 0);
+
+  // Sort by quantity descending and limit to top 6 elements to prevent overcrowding 
+  partChartData.sort((a, b) => b.quantity - a.quantity);
+  const displayPartData = partChartData.slice(0, 6);
+
+  const categoryChartData = Object.entries(categoryUsageMap).map(([name, value]) => ({
+    name,
+    value
+  })).filter(d => d.value > 0);
 
   return (
     <div id="home-dashboard-root" className="w-full max-w-7xl mx-auto px-1 py-4 space-y-6">
@@ -167,7 +437,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
         <div className="p-6 md:p-8 relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-5 text-left">
             <img 
-              src={currentUser.avatarUrl} 
+              src={currentUser.avatarUrl || undefined} 
               alt={currentUser.displayName} 
               referrerPolicy="no-referrer"
               className="size-16 md:size-20 rounded-2xl border-2 border-slate-750 bg-slate-800 shadow-md transform hover:rotate-3 transition-transform"
@@ -217,13 +487,16 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
 
         {/* Metrics Card B: Total Sponsor Sponsorship */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all">
-          <div className="space-y-1 text-left">
+          <div className="space-y-1 text-left min-w-0 flex-1">
             <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Sponsor Funding</span>
-            <span className="text-2xl font-black font-mono text-emerald-700 block">
-              LKR {totalSponsorFunds.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+            <span 
+              className="text-2xl font-black font-mono text-emerald-700 block truncate"
+              title={`LKR ${totalSponsorFunds.toLocaleString('en-US')}`}
+            >
+              LKR {formatShortLKR(totalSponsorFunds)}
             </span>
-            <span className="text-[9.5px] text-slate-450 flex items-center gap-1 hover:underline cursor-help" title={`Total Budget limits across active builds: LKR ${totalBudgetLimit}`}>
-              <Coins className="size-3 text-emerald-500" /> Offset on LKR {totalBudgetLimit.toLocaleString('en-US', { maximumFractionDigits: 0 })} cap
+            <span className="text-[9.5px] text-slate-450 flex items-center gap-1 hover:underline cursor-help select-none" title={`Total Budget limits across active builds: LKR ${totalBudgetLimit.toLocaleString('en-US')}`}>
+              <Coins className="size-3 text-emerald-500 shrink-0" /> Offset on LKR {formatShortLKR(totalBudgetLimit)} cap
             </span>
           </div>
           <div className="size-11 rounded-xl bg-emerald-50/50 flex items-center justify-center text-emerald-600 shrink-0 shadow-3xs">
@@ -315,7 +588,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
                   const itemCostSum = (proj.budgetItems || []).reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
                   const isOverLimit = bVal > 0 && itemCostSum > bVal;
 
-                  const pUsers = Array.from(new Set([proj.leaderId, ...(proj.memberIds || [])]));
+                  const pUsers = Array.from(new Set([proj.leaderId, ...(proj.memberIds || [])])).filter(Boolean);
 
                   return (
                     <div 
@@ -375,10 +648,19 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
 
                         {/* Financial safeguard limits bar */}
                         <div className="bg-slate-50/50 p-2.5 rounded-lg border border-slate-150 text-[10px] space-y-1">
-                          <div className="flex justify-between font-mono">
-                            <span className="text-slate-450 font-sans">Hardware cost ledger</span>
-                            <span className={`font-semibold ${isOverLimit ? "text-rose-600" : "text-slate-700"}`}>
-                              LKR {itemCostSum.toFixed(2)} / LKR {bVal.toLocaleString('en-US', { maximumFractionDigits: 0 })} lim
+                          <div className="flex justify-between font-mono gap-1.5 items-center">
+                            <span className="text-slate-455 font-sans truncate shrink-0 select-none">Hardware cost ledger</span>
+                            <span 
+                              className="font-semibold truncate cursor-help select-none shrink-0"
+                              title={`Spent: LKR ${itemCostSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / Limit: LKR ${bVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            >
+                              <span className={isOverLimit ? "text-rose-600 font-bold" : "text-slate-700"}>
+                                LKR {formatShortLKR(itemCostSum, itemCostSum < 100_000)}
+                              </span>
+                              <span className="text-slate-350 mx-0.5">/</span>
+                              <span className="text-slate-500 font-medium">
+                                {bVal > 0 ? `LKR ${formatShortLKR(bVal)} lim` : "no limit"}
+                              </span>
                             </span>
                           </div>
                           <div className="relative w-full h-1 back-neutral-200 rounded-full bg-slate-200 overflow-hidden">
@@ -401,7 +683,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
                               return (
                                 <img
                                   key={uid}
-                                  src={found.avatarUrl}
+                                  src={found.avatarUrl || undefined}
                                   alt={found.displayName}
                                   referrerPolicy="no-referrer"
                                   className="inline-block size-5 rounded-md border border-white shrink-0"
@@ -490,6 +772,170 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
         {/* RIGHT COLUMN: 2/5 WIDTH */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* VISUAL COMPONENT USAGE ANALYTICS CHART */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
+                <TrendingUp className="size-4 text-blue-600 animate-pulse" />
+                Component Usage breakdown
+              </h3>
+              <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 animate-fade-in">
+                <button
+                  type="button"
+                  onClick={() => setChartView("parts")}
+                  className={`px-2 py-1 text-[9.5px] font-bold rounded-md transition-all cursor-pointer ${
+                    chartView === "parts"
+                      ? "bg-white text-blue-650 shadow-3xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  By Part
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartView("categories")}
+                  className={`px-2 py-1 text-[9.5px] font-bold rounded-md transition-all cursor-pointer ${
+                    chartView === "categories"
+                      ? "bg-white text-blue-650 shadow-3xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  By Category
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all text-center flex flex-col justify-between min-h-[360px]">
+              {displayPartData.length === 0 ? (
+                <div id="no-allocations-prompt" className="my-auto py-8 px-4 flex flex-col items-center justify-center space-y-3">
+                  <div className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400">
+                    <Wrench className="size-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-slate-700">No Active Part Allocations</h4>
+                    <p className="text-[10.5px] text-slate-400 max-w-xs leading-relaxed">
+                      There are currently no stockroom parameters or parts registered with active ongoing projects.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("inventory")}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                  >
+                    Allocate Parts Now
+                  </button>
+                </div>
+              ) : (
+                <div id="chart-visualization-wrapper" className="space-y-4 h-full flex flex-col justify-between">
+                  <div className="text-left">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase block">Metric Scope</span>
+                    <h4 className="text-sm font-bold text-slate-800 font-display">
+                      {chartView === "parts" ? "Stockroom Parts in the Field" : "Allocation Weight by Category"}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                      {chartView === "parts" 
+                        ? `A real-time analysis of the top ${displayPartData.length} most active stockroom items deployed across ${ongoingProjects.length} active builds.`
+                        : `Functional inventory category weights currently requested by active project leaders.`}
+                    </p>
+                  </div>
+
+                  {/* Chart Container */}
+                  <div className="w-full h-56 flex items-center justify-center pr-1 mt-2">
+                    {chartView === "parts" ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={displayPartData}
+                          margin={{ top: 10, right: 5, left: -25, bottom: 5 }}
+                        >
+                          <XAxis 
+                            dataKey="shortName" 
+                            stroke="#94a3b8" 
+                            fontSize={9} 
+                            tickLine={false}
+                            axisLine={false} 
+                          />
+                          <YAxis 
+                            stroke="#94a3b8" 
+                            fontSize={9} 
+                            tickLine={false}
+                            axisLine={false}
+                            allowDecimals={false}
+                          />
+                          <ChartTooltip content={<CustomTooltip />} cursor={{ fill: "rgba(148, 163, 184, 0.06)" }} />
+                          <Bar 
+                            dataKey="quantity" 
+                            radius={[6, 6, 0, 0]}
+                            maxBarSize={32}
+                          >
+                            {displayPartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={categoryChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            paddingAngle={3}
+                            dataKey="value"
+                            label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                          >
+                            {categoryChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <ChartTooltip 
+                            content={({ active, payload }: any) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-slate-900 border border-slate-755 text-white py-1.5 px-3 rounded-lg text-xs shadow-md font-sans text-left z-50">
+                                    <span className="font-extrabold text-[10px] uppercase text-blue-400 block tracking-wider">Category</span>
+                                    <span className="font-bold text-slate-100">{data.name}</span>
+                                    <span className="text-emerald-400 font-mono font-bold block mt-0.5">{data.value} active parts</span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }} 
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+
+                  {/* Dynamic Custom Legend Footer for Visual Cleanliness */}
+                  {chartView === "categories" && (
+                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pt-2 border-t border-slate-100 animate-fade-in">
+                      {categoryChartData.map((entry, index) => (
+                        <div key={entry.name} className="flex items-center gap-1 text-[10px] text-slate-600 font-medium select-none">
+                          <span className="size-2 rounded-full inline-block animate-pulse" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                          <span className="truncate max-w-[80px]" title={entry.name}>{entry.name}</span>
+                          <span className="font-mono text-slate-400">({entry.value})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {chartView === "parts" && (
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-100 select-none">
+                      <span>Total Deployed: <strong>{partChartData.reduce((sum, d) => sum + d.quantity, 0)} units</strong></span>
+                      <span className="flex items-center gap-1">
+                        <span className="size-2 bg-blue-600 rounded-full inline-block animate-ping" /> Real-time tracking
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* QUICK PORTAL ACTION MENU */}
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">

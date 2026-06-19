@@ -154,6 +154,14 @@
     "/categories/{categoryId}": {
       "schema": "Category",
       "description": "Inventory product classification categories"
+    },
+    "/settings/{settingId}": {
+      "schema": "object",
+      "description": "Dynamic configuration settings registers"
+    },
+    "/mail/{mailId}": {
+      "schema": "object",
+      "description": "Outbound trigger emails collection"
     }
   }
 }

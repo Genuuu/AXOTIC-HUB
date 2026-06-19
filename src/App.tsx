@@ -28,10 +28,15 @@ import {
   Trash2,
   Cpu,
   Boxes,
-  Bell
+  Bell,
+  Megaphone,
+  ChevronDown,
+  ChevronRight,
+  Sliders
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
-import logoUrl from "../Images/Logo.png";
+import defaultLogoUrl from "../Images/Logo.png";
+import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { motion, AnimatePresence } from "motion/react";
 
 // Import custom sub-panels
@@ -46,10 +51,13 @@ import IdeasBoard from "./components/IdeasBoard";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const { logoUrl: remoteLogoUrl } = useWorkspaceSettings(currentUser?.isOfflineMock);
+  const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [showUserPopover, setShowUserPopover] = useState(false);
   
   // Theme state: light or dark
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -245,11 +253,16 @@ export default function App() {
       }
     }
 
+    let unsubUserProfile: () => void = () => {};
+
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
+        // Clean up previous listener just in case auth changes rapidly
+        unsubUserProfile();
+        
         // Authenticated Session: Listen to their matching user document dynamically
         const userDocRef = doc(db, "users", firebaseUser.uid);
-        const unsubUserProfile = onSnapshot(userDocRef, (docSnap) => {
+        unsubUserProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             setCurrentUser({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
           } else {
@@ -263,15 +276,18 @@ export default function App() {
           handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
         });
 
-        return () => unsubUserProfile();
       } else {
         // Logged Out Session
+        unsubUserProfile();
         setCurrentUser(null);
         setAuthChecking(false);
       }
     });
 
-    return () => unsubAuth();
+    return () => {
+      unsubAuth();
+      unsubUserProfile();
+    };
   }, []);
 
   // 3. Stream Team Roster list real-time (Only when logged in)
@@ -537,6 +553,8 @@ export default function App() {
     return () => unsub();
   }, [currentUser?.uid, currentUser?.isOfflineMock]);
 
+
+
   const handlePromoteToProject = async (idea: any): Promise<string> => {
     const timestamp = new Date().toISOString();
     const newProjectPayload = {
@@ -638,14 +656,14 @@ export default function App() {
         <div id="secure-hub-context-shell" className="flex-1 flex flex-col md:flex-row min-h-screen w-full">
           
           {/* Side navigation for desktop / top header for mobile */}
-          <aside id="secured-hub-sidebar" className="w-full md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0">
+          <aside id="secured-hub-sidebar" className="sticky top-0 z-40 w-full md:w-64 bg-slate-900/85 backdrop-blur-md border-b border-slate-800 md:relative md:bg-slate-900 md:backdrop-blur-none md:border-b-0 md:border-r flex flex-col justify-between shrink-0 transition-all duration-300">
             
             {/* Top Logo & App Context */}
-            <div className="p-6 border-b border-slate-800 flex items-center justify-between md:block">
+            <div className="py-7 px-6 md:p-6 border-b border-slate-800 flex items-center justify-between md:block">
               <div className="flex items-center space-x-3">
                 <div className="size-8.5 rounded-lg overflow-hidden flex items-center justify-center bg-slate-800 relative">
                   <img 
-                    src={logoUrl} 
+                    src={activeLogoUrl || undefined} 
                     alt="AXOTIC Logo" 
                     className="size-full object-contain" 
                     referrerPolicy="no-referrer"
@@ -844,7 +862,7 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <img
                   referrerPolicy="no-referrer"
-                  src={currentUser.avatarUrl}
+                  src={currentUser.avatarUrl || undefined}
                   alt={currentUser.displayName}
                   className="size-9 rounded-lg border border-slate-700 shadow-xs shrink-0"
                 />
@@ -958,11 +976,11 @@ export default function App() {
                           {notifications.length === 0 ? (
                             <p className="p-4 text-center text-xs text-slate-500">No new activity found.</p>
                           ) : (
-                            notifications.map((notif) => {
+                            notifications.map((notif, idx) => {
                               const isUnread = notif.createdBy !== currentUser?.uid && !notif.readBy.includes(currentUser?.uid || "");
                               return (
                                 <div 
-                                  key={notif.id} 
+                                  key={`${notif.id}-${idx}`} 
                                   className={`p-3 rounded-xl border transition-colors ${
                                     isUnread
                                       ? "bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50"
@@ -1033,6 +1051,156 @@ export default function App() {
                     </AnimatePresence>
                   </motion.button>
 
+                  {/* User Profile Popover Widget */}
+                  {currentUser && (
+                    <div className="relative" id="header-user-popover-root">
+                      <button
+                        onClick={() => setShowUserPopover(!showUserPopover)}
+                        className="flex items-center gap-2 p-1 pr-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700 transition-all cursor-pointer shadow-3xs"
+                        id="header-user-avatar-btn"
+                        title="View status telemetry"
+                      >
+                        <img
+                          src={currentUser.avatarUrl || undefined}
+                          alt={currentUser.displayName}
+                          className="size-7 rounded-lg object-cover border border-slate-200 dark:border-slate-600 shadow-xs shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="text-left hidden lg:block pr-1">
+                          <p className="text-[10px] font-bold text-slate-800 dark:text-slate-200 leading-tight truncate max-w-[80px]">
+                            {currentUser.displayName}
+                          </p>
+                          <p className="text-[8px] text-slate-400 font-mono leading-none uppercase tracking-wider">
+                            {currentUser.role}
+                          </p>
+                        </div>
+                        <ChevronDown className="size-3 text-slate-450 dark:text-slate-400 shrink-0 hidden sm:block" />
+                      </button>
+
+                      <AnimatePresence>
+                        {showUserPopover && (
+                          <>
+                            {/* Backdrop overlay */}
+                            <div
+                              className="fixed inset-0 z-40 bg-transparent"
+                              onClick={() => setShowUserPopover(false)}
+                            />
+                            
+                            <motion.div
+                              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 400,
+                                damping: 30,
+                                opacity: { duration: 0.15 }
+                              }}
+                              className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl p-4 z-50 text-left"
+                              id="header-user-popover-card"
+                            >
+                              {/* Avatar & Basic Info */}
+                              <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                                <img
+                                  src={currentUser.avatarUrl || undefined}
+                                  alt={currentUser.displayName}
+                                  className="size-10 rounded-xl object-cover border border-slate-200 dark:border-slate-705 shadow-xs"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                    {currentUser.displayName}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 font-mono truncate">
+                                    {currentUser.email}
+                                  </p>
+                                  <div className="mt-1 flex items-center">
+                                    {currentUser.role === "admin" ? (
+                                      <span className="bg-blue-500/10 text-blue-500 dark:text-blue-400 text-[8px] font-bold px-1.5 py-0.5 rounded border border-blue-500/20 font-mono uppercase tracking-wider">
+                                        Admin access
+                                      </span>
+                                    ) : (
+                                      <span className="bg-slate-100 dark:bg-slate-805 text-slate-600 dark:text-slate-400 text-[8px] font-bold px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono uppercase tracking-wider">
+                                        Specialist
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Simple telemetry statistics */}
+                              <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                                  <span className="block text-sm font-extrabold text-slate-900 dark:text-white font-mono leading-tight">
+                                    {projectsList.length}
+                                  </span>
+                                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+                                    Projects
+                                  </span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                                  <span className="block text-sm font-extrabold text-rose-500 font-mono leading-tight">
+                                    {notifications.filter(n => n.createdBy !== currentUser?.uid && !n.readBy.includes(currentUser?.uid || "")).length}
+                                  </span>
+                                  <span className="text-[8px] font-bold text-rose-400 dark:text-rose-500 uppercase tracking-wider font-mono">
+                                    Unread Alerts
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Direct Links */}
+                              <div className="space-y-1">
+                                <button
+                                  onClick={() => {
+                                    setShowUserPopover(false);
+                                    handleOpenEditProfile();
+                                  }}
+                                  className="w-full flex items-center justify-between text-left p-2 rounded-xl text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent hover:border-slate-150/50 dark:hover:border-slate-750 transition-colors cursor-pointer"
+                                  id="popover-link-profile"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <User className="size-3.5 text-slate-400" />
+                                    Configure Profile Mode
+                                  </span>
+                                  <ChevronRight className="size-3 text-slate-400" />
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setShowUserPopover(false);
+                                    setActiveTab("settings");
+                                  }}
+                                  className="w-full flex items-center justify-between text-left p-2 rounded-xl text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent hover:border-slate-150/50 dark:hover:border-slate-750 transition-colors cursor-pointer"
+                                  id="popover-link-settings"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <Sliders className="size-3.5 text-slate-400" />
+                                    Command Settings
+                                  </span>
+                                  <ChevronRight className="size-3 text-slate-400" />
+                                </button>
+
+                                <div className="border-t border-slate-100 dark:border-slate-800/80 my-2 pt-1.5">
+                                  <button
+                                    onClick={() => {
+                                      setShowUserPopover(false);
+                                      handleLogout();
+                                    }}
+                                    className="w-full flex items-center gap-2 text-left p-2 rounded-xl text-[11px] font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
+                                    id="popover-link-logout"
+                                  >
+                                    <LogOut className="size-3.5 shrink-0" />
+                                    Log Out Workspace
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
                   {/* Real-time Indicator banner */}
                   {currentUser?.isOfflineMock ? (
                     <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/30 p-2 px-3.5 rounded-xl text-xs text-amber-800 dark:text-amber-300 font-sans shadow-2xs select-none">
@@ -1047,6 +1215,8 @@ export default function App() {
                   )}
                 </div>
               </div>
+
+
             </header>
 
             {/* Core Content View Area container */}
