@@ -131,7 +131,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
   return (
     <div 
       id="public-landing-container" 
-      className="min-h-screen bg-slate-50/60 text-[#0f2e46] flex flex-col items-center p-4 sm:p-8 md:p-12 relative overflow-x-hidden font-sans antialiased"
+      className="min-h-screen bg-slate-50/60 text-[#0f2e46] flex flex-col items-center pt-4 sm:pt-8 md:pt-12 px-4 sm:px-8 md:px-12 pb-4 relative overflow-clip font-sans antialiased"
     >
       {/* Scroll Progress Bar */}
       <motion.div 
@@ -153,7 +153,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-5xl flex flex-col md:flex-row justify-between items-center z-20 py-4 border-b border-slate-200/60 mb-12 gap-4 sticky top-4 bg-slate-50/80 backdrop-blur-md px-6 rounded-2xl"
+        className="w-full max-w-5xl flex flex-row justify-between items-center z-20 py-4 border-b border-slate-200/60 mb-12 gap-4 sticky top-4 bg-slate-50/80 backdrop-blur-md px-4 sm:px-6 rounded-2xl"
       >
         <div className="flex items-center space-x-3.5">
           <img 
@@ -209,14 +209,14 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
           onClick={onOpenLogin}
           whileHover={{ scale: 1.03, backgroundColor: "#0f2e46", color: "#ffffff" }}
           whileTap={{ scale: 0.97 }}
-          className="text-xs font-bold tracking-wider text-[#0f2e46] hover:text-white px-5 py-2.5 rounded-xl border border-[#0f2e46]/20 bg-white/70 backdrop-blur-md transition-all duration-200 font-mono cursor-pointer flex items-center gap-2.5 shadow-xs whitespace-nowrap"
+          className="text-[10px] sm:text-xs font-bold tracking-wider text-[#0f2e46] hover:text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl border border-[#0f2e46]/20 bg-white/70 backdrop-blur-md transition-all duration-200 font-mono cursor-pointer flex items-center gap-2 shadow-xs whitespace-nowrap"
         >
-          <Lock className="size-3.5" /> SECURE GATEWAY
+          <Lock className="size-3.5" /> <span className="hidden sm:inline">SECURE GATEWAY</span><span className="sm:hidden">LOGIN</span>
         </motion.button>
       </motion.header>
 
       {/* Main Public Page Content Container */}
-      <main className="w-full max-w-4xl z-10 flex flex-col items-stretch space-y-20">
+      <main className="w-full max-w-4xl flex-1 z-10 flex flex-col items-stretch space-y-20">
 
         {/* SECTION 1: INTRO */}
         {landingData.showIntro !== false && (
@@ -280,7 +280,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
               </p>
 
               {/* Multidisciplinary Spec Badges */}
-              <div className="grid grid-cols-3 gap-3 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center text-center">
                   <div className="size-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2.5">
                     <Cpu className="size-4" />
@@ -344,8 +344,11 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             <h2 className="text-2xl sm:text-3xl font-black text-[#0f2e46] tracking-tight uppercase">
               Our Builds
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-xl leading-relaxed">
-              Hover over or click any build module block below to view its classification specifications.
+            <p className="text-xs sm:text-sm text-slate-500 max-w-xl leading-relaxed hidden md:block">
+              Click on any build module block below to view its classification specifications in detail.
+            </p>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-xl leading-relaxed block md:hidden">
+              Tap any build module below to view its full specifications.
             </p>
           </div>
 
@@ -358,55 +361,56 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                   key={`${spec.id || 'build'}-${idx}`}
                   id={`build-card-${idx}`}
                   variants={slowFadeIn}
-                  className="relative aspect-video sm:aspect-16/10 rounded-3xl overflow-hidden shadow-xs cursor-pointer group border border-slate-200 bg-slate-900 select-none"
+                  className="rounded-3xl overflow-hidden shadow-xs cursor-pointer group border border-slate-200 bg-white hover:border-slate-300 hover:shadow-md flex flex-col transition-all"
                   onClick={() => setLightboxImageIndex(idx)}
-                  whileHover={{ y: -6, scale: 1.015 }}
-                  transition={{ duration: 0.3 }}
+                  whileHover={{ y: -4 }}
                 >
-                  <motion.img 
-                    layoutId={`lightbox-img-${idx}`}
-                    src={spec.imageUrl || `https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`} 
-                    alt={spec.title} 
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    referrerPolicy="no-referrer"
-                  />
-                  
-                  {/* Cover Gradient Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/30 to-transparent transition-opacity duration-300" />
-
-                  {/* Revealable Overlay */}
-                  <div className="absolute inset-0 flex flex-col justify-end p-6 z-10">
-                    <div className="space-y-1 text-left">
-                      <span className="text-[9px] font-bold font-mono tracking-wider bg-blue-600/90 text-white px-2 py-0.5 rounded uppercase">
+                  <div className="relative aspect-video sm:aspect-16/10 overflow-hidden bg-slate-100 border-b border-slate-100">
+                    <motion.img 
+                      layoutId={`lightbox-img-${idx}`}
+                      src={spec.imageUrl || `https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`} 
+                      alt={spec.title} 
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                    
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-0 md:opacity-100 group-hover:opacity-0 transition-opacity duration-300" />
+                    
+                    <div className="absolute top-3 left-3 md:top-4 md:left-4">
+                      <span className="text-[9px] font-bold font-mono tracking-wider bg-blue-600 text-white px-2 py-1 rounded uppercase shadow-sm">
                         {spec.category}
                       </span>
-                      <h3 className="text-lg font-extrabold text-white leading-snug">
-                        {spec.title}
-                      </h3>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-white/10 transition-all duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100">
-                      <span className="text-[10px] font-mono tracking-widest text-blue-300 block uppercase font-bold">
-                        CLASSIFIED TOPIC
-                      </span>
-                      <p className="text-sm font-bold text-white tracking-wide">
-                        {spec.subtitle}
-                      </p>
-                      {spec.technologies && (
-                        <p className="text-[10px] text-slate-300 mt-2 font-mono">
-                          {spec.technologies}
-                        </p>
-                      )}
+                    <div className="absolute bottom-3 right-3 md:bottom-4 md:right-4 bg-black/60 backdrop-blur-md text-[8px] font-bold tracking-widest text-white uppercase py-1.5 px-3 rounded-full font-mono md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      VIEW SPECS
                     </div>
                   </div>
 
-                  <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-[8px] font-bold tracking-widest text-white/80 uppercase py-1 px-2.5 rounded-md font-mono pointer-events-none">
-                    CLICK OR HOVER TO REVEAL
+                  <div className="p-5 md:p-6 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-base md:text-lg font-black text-slate-800 leading-snug tracking-tight mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
+                        {spec.title}
+                      </h3>
+                      <p className="text-xs md:text-sm text-slate-500 leading-relaxed line-clamp-3">
+                        {spec.subtitle}
+                      </p>
+                    </div>
+                    {spec.technologies && (
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                         <span className="text-[9px] font-mono tracking-widest text-slate-400 block uppercase font-bold mb-1.5">
+                           TECHNOLOGIES
+                         </span>
+                         <p className="text-[10px] md:text-xs text-slate-600 font-mono font-medium line-clamp-2">
+                           {spec.technologies}
+                         </p>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               ))
             ) : (
-               <div className="col-span-2 text-center text-slate-500 py-12 border border-dashed border-slate-200 rounded-3xl">
+               <div className="col-span-1 md:col-span-2 text-center text-slate-500 py-12 border border-dashed border-slate-200 rounded-3xl">
                  No active build profiles synchronized.
                </div>
             )}
@@ -496,15 +500,15 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                 <>
                   <button 
                     onClick={() => setCurrentPhotoIndex(prev => prev === 0 ? landingData.galleryPhotos!.length - 1 : prev - 1)}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-0 group-hover:opacity-100"
+                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
                   >
-                    <ChevronLeft className="size-5" />
+                    <ChevronLeft className="size-4 sm:size-5" />
                   </button>
                   <button 
                     onClick={() => setCurrentPhotoIndex(prev => (prev + 1) % landingData.galleryPhotos!.length)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-0 group-hover:opacity-100"
+                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
                   >
-                    <ChevronRight className="size-5" />
+                    <ChevronRight className="size-4 sm:size-5" />
                   </button>
                   
                   {/* Navigation Dots */}
@@ -563,16 +567,16 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                 <span className="text-[10px] font-mono tracking-widest text-slate-400 font-bold uppercase">
                   BUSINESS INQUIRIES
                 </span>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <span className="text-sm font-semibold font-mono text-white tracking-wide bg-slate-900/40 py-2 px-3.5 rounded-xl border border-white/10 select-all shrink-0">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+                  <span className="text-xs sm:text-sm font-semibold font-mono text-white tracking-wide bg-slate-900/40 py-2 px-3 sm:px-3.5 rounded-xl border border-white/10 select-all shrink-0 truncate w-full sm:w-auto">
                     {landingData.contactEmail || "contact@teamaxotic.com"}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <motion.button
                       onClick={handleCopyEmail}
                       whileHover={{ scale: 1.04 }}
                       whileTap={{ scale: 0.96 }}
-                      className="p-2 sm:px-3 sm:py-2.5 bg-white text-[#0f2e46] text-[10px] font-bold font-mono tracking-wider rounded-xl uppercase hover:bg-slate-100 flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      className="p-2 sm:px-3 sm:py-2.5 bg-white text-[#0f2e46] text-[10px] font-bold font-mono tracking-wider rounded-xl uppercase hover:bg-slate-100 flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer"
                     >
                       {copied ? (
                         <>
@@ -589,9 +593,9 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                       href={`mailto:${landingData.contactEmail || "contact@teamaxotic.com"}?subject=Team%20AXOTIC%20Sponsorship%20Inquiry`}
                       whileHover={{ scale: 1.04 }}
                       whileTap={{ scale: 0.96 }}
-                      className="p-2 sm:px-3 sm:py-2.5 bg-blue-600 text-white text-[10px] font-bold font-mono tracking-wider rounded-xl uppercase hover:bg-blue-500 flex items-center gap-1.5 shrink-0"
+                      className="p-2 sm:px-3 sm:py-2.5 bg-blue-600 text-white text-[10px] font-bold font-mono tracking-wider rounded-xl uppercase hover:bg-blue-500 flex items-center justify-center gap-1.5 flex-1 sm:flex-none"
                     >
-                      <Mail className="size-3" /> EMAIL DIRECT
+                      <Mail className="size-3" /> EMAIL
                     </motion.a>
                   </div>
                 </div>
@@ -663,7 +667,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
-        className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-20 pt-8 border-t border-slate-200/40 pb-12 text-center sm:text-left"
+        className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-20 pt-8 border-t border-slate-200/40 pb-6 text-center sm:text-left"
       >
         <div className="flex flex-col space-y-1">
           <span>AXOTIC HUB V1.0</span>
@@ -696,7 +700,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                 referrerPolicy="no-referrer"
               />
               <button 
-                className="absolute -top-12 right-0 text-white hover:text-red-400 p-2 border border-white/10 bg-black/50 rounded-full backdrop-blur-sm transition-colors" 
+                className="absolute top-2 right-2 sm:-top-12 sm:right-0 text-white hover:text-red-400 p-2 border border-white/10 bg-black/50 rounded-full backdrop-blur-sm transition-colors z-50" 
                 onClick={() => setLightboxImageIndex(null)}
               >
                 <X className="size-5" />
@@ -705,7 +709,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="absolute bottom-4 left-4 right-4 bg-slate-900/80 backdrop-blur-md rounded-2xl p-5 text-left border border-white/10 sm:max-w-xl shadow-2xl"
+                className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 text-left border border-white/10 sm:max-w-xl shadow-2xl overflow-y-auto max-h-[40vh]"
               >
                 <p className="text-white text-xl font-extrabold tracking-tight">
                   {landingData.buildSpecs[lightboxImageIndex].title}
