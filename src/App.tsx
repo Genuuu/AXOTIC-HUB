@@ -32,7 +32,8 @@ import {
   Megaphone,
   ChevronDown,
   ChevronRight,
-  Sliders
+  Sliders,
+  Trophy
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
 import defaultLogoUrl from "../Images/Logo.png";
@@ -48,6 +49,7 @@ import InventoryManager from "./components/InventoryManager";
 import MemberRoster from "./components/MemberRoster";
 import AdminSettings from "./components/AdminSettings";
 import IdeasBoard from "./components/IdeasBoard";
+import CompetitionsHub from "./components/CompetitionsHub";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -79,8 +81,8 @@ export default function App() {
     }
   }, [isDark]);
 
-  // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas"
-  const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas">("home");
+  // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions"
+  const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions">("home");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   
   // UI Control states
@@ -832,6 +834,24 @@ export default function App() {
                   Browse active specialists with technical specialty tags, email addresses, and graduation classes.
                 </span>
               </button>
+
+              <button
+                id="tab-nav-competitions"
+                onClick={() => setActiveTab("competitions")}
+                className={`w-full px-3 py-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2.5 group relative ${
+                  activeTab === "competitions"
+                    ? "bg-slate-800 text-blue-400 shadow-sm font-semibold"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                }`}
+              >
+                <Trophy className="size-4" /> Competitions
+
+                <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
+                  <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
+                  <strong className="text-white block font-semibold mb-0.5 text-[11px]">Upcoming Challenges</strong>
+                  Track regional robotics cups, register team alerts, and toggle logistics reminders.
+                </span>
+              </button>
               
               <button
                 id="tab-nav-settings"
@@ -1310,6 +1330,18 @@ export default function App() {
                       <MemberRoster currentUser={currentUser} roster={roster} />
                     </motion.div>
                   )}
+                  {activeTab === "competitions" && currentUser && (
+                    <motion.div
+                      key="competitions"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <CompetitionsHub currentUser={currentUser} roster={roster} />
+                    </motion.div>
+                  )}
                   {activeTab === "settings" && currentUser && (
                     <motion.div
                       key="settings"
@@ -1388,6 +1420,17 @@ export default function App() {
                 >
                   <Users className={`size-5 mb-1 ${activeTab === "roster" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "roster" ? 2.5 : 2} />
                   <span>Members</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("competitions")}
+                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "competitions" 
+                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Trophy className={`size-5 mb-1 ${activeTab === "competitions" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "competitions" ? 2.5 : 2} />
+                  <span>Arena</span>
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}

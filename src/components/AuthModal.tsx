@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { auth, db } from "../firebase";
-import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { Shield, Sparkles, X, Mail, ArrowRight, Key } from "lucide-react";
 import { UserRole, UserProfile } from "../types";
@@ -156,22 +156,25 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
     setErrorText("");
 
     try {
+      // Sign in anonymously to authenticate the user session in Firebase Auth securely
+      const cred = await signInAnonymously(auth);
+      const firebaseUid = cred.user.uid;
+
       // 1. Is it the Admin Parent Account?
       if (email === "genukakisara@gmail.com") {
-        const mockUid = "admin-parent-uid";
-        const userDocRef = doc(db, "users", mockUid);
+        const userDocRef = doc(db, "users", firebaseUid);
         const docSnap = await getDoc(userDocRef);
 
         let profile: UserProfile;
         if (docSnap.exists()) {
-          profile = { uid: mockUid, ...docSnap.data() } as UserProfile;
+          profile = { uid: firebaseUid, ...docSnap.data() } as UserProfile;
           if (profile.role !== "admin") {
             profile.role = "admin";
             await setDoc(userDocRef, profile);
           }
         } else {
           profile = {
-            uid: mockUid,
+            uid: firebaseUid,
             displayName: "Genu Kakisara (Admin)",
             email: email,
             role: "admin",
@@ -195,13 +198,29 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        const docSnap = querySnapshot.docs[0];
-        const profile = { uid: docSnap.id, ...docSnap.data() } as UserProfile;
+        const matchedDoc = querySnapshot.docs[0];
+        const matchedData = matchedDoc.data();
+        
+        const profile: UserProfile = {
+          ...matchedData,
+          uid: firebaseUid,
+          displayName: matchedData.displayName || "AXOTIC Scholar",
+          avatarUrl: matchedData.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${firebaseUid}`
+        } as UserProfile;
+
+        // Write user profile to the newly generated anonymous user ID so isMember() / hasUserDoc() passes
+        await setDoc(doc(db, "users", firebaseUid), profile);
 
         localStorage.setItem("axotic_local_auth", JSON.stringify(profile));
         onAuthSuccess(profile);
         onClose();
       } else {
+        // Sign out if not registered
+        try {
+          await signOut(auth);
+        } catch (signOutErr) {
+          console.warn("Sign out err", signOutErr);
+        }
         setErrorText(`Access Denied: The Google email "${email}" is not registered in the system. An administrator must onboard you first.`);
       }
     } catch (err: any) {

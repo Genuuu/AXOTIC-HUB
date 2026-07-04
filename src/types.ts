@@ -143,9 +143,25 @@ export interface AppNotification {
   createdBy: string;
   creatorName: string;
   createdAt: string;
-  type: "idea_created" | "project_created" | "comment_added";
+  type: "idea_created" | "project_created" | "comment_added" | "competition_created" | "competition_reminder";
   linkId?: string; // e.g., idea id or project id
   readBy: string[]; // array of userIds who have read it
+}
+
+export interface Competition {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  location: string;
+  link?: string;
+  createdBy: string;
+  creatorName: string;
+  createdAt: string;
+  remindUserIds: string[]; // array of userIds who want to be reminded
+  isRegistered: boolean; // whether our team is registered for this competition
+  registeredName?: string; // official registration name of the team, if registered
+  registeredUserIds: string[]; // array of userIds of team members registered to attend/participate
 }
 
 export interface AdminLog {

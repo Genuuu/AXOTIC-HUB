@@ -210,6 +210,10 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
       window.addEventListener("axotic_db_update", handleUpdate);
       return () => window.removeEventListener("axotic_db_update", handleUpdate);
     } else {
+      if (currentUser.role !== "admin") {
+        setAdminLogs([]);
+        return () => {};
+      }
       const unsub = onSnapshot(collection(db, "admin_logs"), (snap) => {
         const list: AdminLog[] = [];
         snap.forEach((d) => {
@@ -223,7 +227,7 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
       });
       return () => unsub();
     }
-  }, [currentUser.isOfflineMock]);
+  }, [currentUser.isOfflineMock, currentUser.role]);
 
   // Load General workspace settings configuration on mount
   useEffect(() => {

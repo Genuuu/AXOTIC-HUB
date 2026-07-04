@@ -124,9 +124,34 @@
         "promotedProjectId": { "type": "string" }
       },
       "required": ["id", "title", "createdBy", "creatorName", "createdAt", "status"]
+    },
+    "Competition": {
+      "title": "Competition",
+      "description": "Upcoming robotics competitions and details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "location": { "type": "string" },
+        "link": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "remindUserIds": { "type": "array", "description": "Array of user IDs who requested a reminder" },
+        "isRegistered": { "type": "boolean", "description": "Whether our team is registered for the competition" },
+        "registeredName": { "type": "string", "description": "Official name under which the team is registered" },
+        "registeredUserIds": { "type": "array", "description": "Array of user IDs of members who are registered to attend/participate" }
+      },
+      "required": ["id", "title", "date", "createdBy", "creatorName", "createdAt", "isRegistered", "registeredUserIds"]
     }
   },
   "firestore": {
+    "/competitions/{competitionId}": {
+      "schema": "Competition",
+      "description": "Robotics competitions list"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "Book" },
       "description": "Collection of user profile sheets"

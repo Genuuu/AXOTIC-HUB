@@ -51,7 +51,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && 
          'role' in request.resource.data && 'role' in resource.data && request.resource.data.role == resource.data.role && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'academicYear', 'subTeam', 'specifications', 'birthday', 'isOnline', 'lastActiveAt'])) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'academicYear', 'subTeam', 'specifications', 'birthday', 'isOnline', 'lastActiveAt', 'phoneNumber'])) ||
         isAdmin() ||
         ('firebase' in request.auth.token && 'sign_in_provider' in request.auth.token.firebase && request.auth.token.firebase.sign_in_provider == 'anonymous')
       );
@@ -125,6 +125,16 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isSignedIn() && ('createdBy' in resource.data) && request.auth.uid == resource.data.createdBy);
     }
 
+    match /competitions/{competitionId} {
+      allow read: if isSignedIn();
+      allow create: if isMember() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isMember() && (
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds'])
+      );
+      allow delete: if isAdmin() || (isMember() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
+    }
+
     match /landing/{docId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -140,6 +150,10 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    match /test/{docId} {
+      allow read: if true;
     }
 
     match /mail/{mailId} {

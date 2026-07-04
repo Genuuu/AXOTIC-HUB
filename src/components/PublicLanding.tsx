@@ -662,11 +662,11 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
-        className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-20 pt-8 border-t border-slate-200/40 pb-4 text-center sm:text-left"
+        className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-20 pt-8 border-t border-slate-200/40 pb-12 text-center sm:text-left"
       >
         <div className="flex flex-col space-y-1">
           <span>AXOTIC HUB V1.0</span>
-          <span>@ 2026 all rights reserved</span>
+          <span>&copy; 2026 all rights reserved</span>
         </div>
         <div className="text-[9px] text-slate-400 font-normal">
           Designed with Swiss typographic principles

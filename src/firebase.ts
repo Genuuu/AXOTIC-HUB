@@ -12,7 +12,7 @@ export const auth = getAuth();
 export const googleProvider = new GoogleAuthProvider(); // Added the provider here
 
 export async function createGlobalNotification(
-  type: "idea_created" | "project_created" | "comment_added",
+  type: "idea_created" | "project_created" | "comment_added" | "competition_created" | "competition_reminder",
   message: string,
   linkId: string,
   currentUser: any
