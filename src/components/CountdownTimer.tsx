@@ -6,6 +6,8 @@ interface CountdownTimerProps {
 }
 
 export function CountdownTimer({ targetDateStr }: CountdownTimerProps) {
+  const isTbd = targetDateStr === "TBD" || targetDateStr === "To Be Decided" || !targetDateStr;
+
   const [timeLeft, setTimeLeft] = useState<{
     days: number;
     hours: number;
@@ -15,6 +17,8 @@ export function CountdownTimer({ targetDateStr }: CountdownTimerProps) {
   }>({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true });
 
   useEffect(() => {
+    if (isTbd) return;
+
     const calculateTimeLeft = () => {
       // Treat target as the start of that day in the user's local timezone
       const targetDate = new Date(targetDateStr);
@@ -48,6 +52,15 @@ export function CountdownTimer({ targetDateStr }: CountdownTimerProps) {
 
     return () => clearInterval(intervalId);
   }, [targetDateStr]);
+
+  if (isTbd) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono bg-slate-100 dark:bg-slate-900/60 py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800/80">
+        <Clock className="size-3.5 text-slate-400" />
+        <span>Date To Be Decided</span>
+      </div>
+    );
+  }
 
   if (timeLeft.isPast) {
     return (

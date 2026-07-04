@@ -15,6 +15,7 @@ export interface UserProfile {
   password?: string;
   isOnline?: boolean;
   lastActiveAt?: string;
+  homepageUrl?: string;
 }
 
 export type ProjectStatus = "Planning" | "Fabricating" | "Testing" | "Finished" | "Continuous";
@@ -148,6 +149,8 @@ export interface AppNotification {
   readBy: string[]; // array of userIds who have read it
 }
 
+export type CompetitionType = "Battlebot" | "Micromouse" | "Task Robot" | "IOT" | "Idea pitch" | "Other";
+
 export interface Competition {
   id: string;
   title: string;
@@ -155,6 +158,7 @@ export interface Competition {
   date: string;
   location: string;
   link?: string;
+  type?: CompetitionType;
   createdBy: string;
   creatorName: string;
   createdAt: string;

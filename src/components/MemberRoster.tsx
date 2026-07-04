@@ -50,6 +50,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
   const [editRole, setEditRole] = useState<UserRole>("member");
   const [editSubTeam, setEditSubTeam] = useState("Core Engineering");
   const [editPhone, setEditPhone] = useState("");
+  const [editHomepage, setEditHomepage] = useState("");
 
   const isAdmin = currentUser.role === "admin";
 
@@ -198,9 +199,10 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
     setEditRole(member.role || "member");
     setEditSubTeam(member.subTeam || "Core Engineering");
     setEditPhone(member.phoneNumber || "");
+    setEditHomepage(member.homepageUrl || "");
   };
 
-  const handleSaveProfileOverride = async (uid: string, updatedRole: UserRole, updatedSubTeam: string, updatedPhone: string) => {
+  const handleSaveProfileOverride = async (uid: string, updatedRole: UserRole, updatedSubTeam: string, updatedPhone: string, updatedHomepage: string) => {
     if (currentUser.isOfflineMock) {
       setLoadingId(uid);
       const stored = localStorage.getItem("axotic_mock_roster");
@@ -211,6 +213,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
           rosterList[idx].role = updatedRole;
           rosterList[idx].subTeam = updatedSubTeam;
           rosterList[idx].phoneNumber = updatedPhone.trim();
+          rosterList[idx].homepageUrl = updatedHomepage.trim();
           localStorage.setItem("axotic_mock_roster", JSON.stringify(rosterList));
 
           // Sync local login profile if target is currently logged in user
@@ -219,7 +222,8 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
               ...currentUser, 
               role: updatedRole, 
               subTeam: updatedSubTeam, 
-              phoneNumber: updatedPhone.trim() 
+              phoneNumber: updatedPhone.trim(),
+              homepageUrl: updatedHomepage.trim()
             };
             localStorage.setItem("axotic_local_auth", JSON.stringify(updatedProfile));
           }
@@ -240,7 +244,8 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
       await updateDoc(userRef, { 
         role: updatedRole, 
         subTeam: updatedSubTeam, 
-        phoneNumber: updatedPhone.trim() 
+        phoneNumber: updatedPhone.trim(),
+        homepageUrl: updatedHomepage.trim()
       });
       setEditingProfileId(null);
       setSuccessMsg("Successfully saved administrative profile changes.");
@@ -570,6 +575,17 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                         />
                       </div>
 
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-sans">Personal Homepage</label>
+                        <input
+                          type="url"
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-1.8 outline-hidden text-slate-700 font-mono font-semibold"
+                          value={editHomepage}
+                          onChange={(e) => setEditHomepage(e.target.value)}
+                          placeholder="e.g. https://myportfolio.dev"
+                        />
+                      </div>
+
                       <div className="flex items-center gap-1.5 justify-end pt-2">
                         <button
                           type="button"
@@ -580,7 +596,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSaveProfileOverride(member.uid, editRole, editSubTeam, editPhone)}
+                          onClick={() => handleSaveProfileOverride(member.uid, editRole, editSubTeam, editPhone, editHomepage)}
                           disabled={loadingId === member.uid}
                           className="px-2.5 py-1 text-[10.5px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-2xs cursor-pointer flex items-center gap-1"
                         >
@@ -601,6 +617,21 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                       <div className="flex justify-between py-1 border-b border-slate-50">
                         <span className="text-slate-400 font-medium">Contact Number:</span>
                         <span className="font-bold text-slate-700 font-mono">{member.phoneNumber || "None Provided"}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-50">
+                        <span className="text-slate-400 font-medium">Personal Website:</span>
+                        {member.homepageUrl ? (
+                          <a 
+                            href={member.homepageUrl.startsWith("http") ? member.homepageUrl : `https://${member.homepageUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-bold text-blue-600 hover:underline truncate max-w-[150px]"
+                          >
+                            Visit Site ↗
+                          </a>
+                        ) : (
+                          <span className="font-bold text-slate-500 italic">None</span>
+                        )}
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-50">
                         <span className="text-slate-400 font-medium">Birthday:</span>
@@ -772,6 +803,17 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                           <p className="text-[10px] text-slate-500 font-mono tracking-tight mt-0.5 truncate flex items-center gap-1 leading-none select-all" title="Contact telephone number">
                             <span className="text-slate-400">📞</span> {member.phoneNumber}
                           </p>
+                        )}
+                        {member.homepageUrl && (
+                          <a 
+                            href={member.homepageUrl.startsWith("http") ? member.homepageUrl : `https://${member.homepageUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold tracking-tight mt-1 flex items-center gap-1 hover:underline" 
+                            title="Visit personal homepage / portfolio website"
+                          >
+                            <span>🌐</span> Visit Website
+                          </a>
                         )}
                         
                         <div className="flex items-center gap-1.5 mt-1.5">

@@ -20,9 +20,10 @@ import {
   Briefcase, 
   ArrowRight,
   Sparkles,
-  Tag
+  Tag,
+  Trophy
 } from "lucide-react";
-import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, AllocatedHardware } from "../types";
+import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, AllocatedHardware, Competition } from "../types";
 import TagInput from "./TagInput";
 import { 
   ResponsiveContainer, 
@@ -40,7 +41,7 @@ interface HomeDashboardProps {
   currentUser: UserProfile;
   roster: UserProfile[];
   projectsList: Project[];
-  onNavigate: (tab: "projects" | "inventory" | "roster" | "settings", projectId?: string) => void;
+  onNavigate: (tab: "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions", projectId?: string) => void;
   onOpenEditProfile: () => void;
 }
 
@@ -95,6 +96,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
   const [allLogs, setAllLogs] = useState<ProjectLog[]>([]);
   const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
   const [chartView, setChartView] = useState<"parts" | "categories">("parts");
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
 
   // 1. Fetch live stockroom parameters
   useEffect(() => {
@@ -121,6 +123,35 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
         setInventory(items);
       }, (err) => {
         console.warn("Could not query inventory real-time for home metrics.", err instanceof Error ? err.message : String(err));
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser.isOfflineMock]);
+
+  // Fetch live competitions
+  useEffect(() => {
+    if (currentUser.isOfflineMock) {
+      const handleStorageUpdate = () => {
+        const localComps = localStorage.getItem("axotic_mock_competitions");
+        if (localComps) {
+          try {
+            setCompetitions(JSON.parse(localComps));
+          } catch (_) {}
+        }
+      };
+      handleStorageUpdate();
+      window.addEventListener("axotic_db_update", handleStorageUpdate);
+      return () => window.removeEventListener("axotic_db_update", handleStorageUpdate);
+    } else {
+      const q = query(collection(db, "competitions"), orderBy("date", "asc"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const items: Competition[] = [];
+        snapshot.forEach((snapDoc) => {
+          items.push({ id: snapDoc.id, ...snapDoc.data() } as Competition);
+        });
+        setCompetitions(items);
+      }, (err) => {
+        console.warn("Could not query competitions real-time for home metrics.", err instanceof Error ? err.message : String(err));
       });
       return () => unsubscribe();
     }
@@ -375,6 +406,10 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
   const lowStockItems = inventory.filter(item => item.availableQuantity <= 5);
   const myProjects = projectsList.filter(p => p.leaderId === currentUser.uid || (p.memberIds && p.memberIds.includes(currentUser.uid)));
 
+  const todayStr = new Date().toISOString().split("T")[0];
+  const upcomingComps = competitions.filter(c => c.date === "TBD" || c.date === "To Be Decided" || !c.date || c.date >= todayStr);
+  const myUpcomingComps = upcomingComps.filter(c => (c.registeredUserIds || []).includes(currentUser.uid) || (c.remindUserIds || []).includes(currentUser.uid));
+
   // Aggregate current assignments of stockroom parts to active projects
   const partUsageMap: { 
     [partName: string]: { 
@@ -456,18 +491,68 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
               <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white mt-1.5 font-display flex items-center gap-2 flex-wrap">
                 <span>{getGreeting()}, {currentUser.displayName}</span>
               </h2>
-              <p className="text-xs text-slate-300 mt-1 max-w-xl font-sans leading-relaxed">
+              <p className="text-xs text-slate-300 mt-1 max-w-xl font-sans flex items-center gap-3 flex-wrap leading-relaxed">
                 <span className="text-slate-400 font-mono">{currentUser.email}</span>
+                {currentUser.homepageUrl ? (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <a 
+                      href={currentUser.homepageUrl.startsWith("http") ? currentUser.homepageUrl : `https://${currentUser.homepageUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 hover:underline"
+                    >
+                      <span>🌐</span> My Homepage
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      onClick={onOpenEditProfile}
+                      className="text-slate-400 hover:text-slate-300 text-xs font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                    >
+                      <span>🌐</span> Link your homepage website
+                    </button>
+                  </>
+                )}
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onOpenEditProfile}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer select-none transition-all duration-150 flex items-center gap-2 shadow-xs shrink-0 border border-blue-500 hover:shadow-md"
-          >
-            <User className="size-4" /> Edit My Profile
-          </button>
+          <div className="flex items-center gap-4 shrink-0">
+            <div 
+              onClick={() => onNavigate("roster")}
+              className="flex -space-x-1.5 cursor-pointer hover:opacity-80 transition-opacity mr-2" 
+              title="Active Specialists Directory"
+            >
+              {roster.filter(m => m.isOnline).slice(0, 5).map(m => (
+                <div key={m.uid} className="relative group cursor-help">
+                  <img 
+                    src={m.avatarUrl || undefined} 
+                    alt={m.displayName}
+                    className="size-7 rounded-full border-2 border-slate-800 object-cover bg-white" 
+                  />
+                  <div 
+                    className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-slate-800 bg-emerald-500 animate-[pulse_2s_infinite]" 
+                    title={`${m.displayName} - Online`}
+                  />
+                </div>
+              ))}
+              {roster.filter(m => m.isOnline).length > 5 && (
+                <div className="size-7 rounded-full border-2 border-slate-800 bg-slate-700 flex items-center justify-center text-[9px] font-bold text-white relative z-10">
+                  +{roster.filter(m => m.isOnline).length - 5}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={onOpenEditProfile}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer select-none transition-all duration-150 flex items-center gap-2 shadow-xs shrink-0 border border-blue-500 hover:shadow-md"
+            >
+              <User className="size-4" /> Edit My Profile
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -552,166 +637,101 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
                 <Compass className="size-4 hover:rotate-45 transition-transform text-blue-600" />
-                My Projects ({myProjects.length})
+                My Active Projects
               </h3>
               <button 
                 onClick={() => onNavigate("projects")}
                 className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
               >
-                Launch Complete Board <ArrowRight className="size-3" />
+                View All <ArrowRight className="size-3" />
               </button>
             </div>
 
             {myProjects.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs italic shadow-3xs">
-                You are currently not listed as a leader or formal member of any active projects.
-                <button
-                  onClick={() => onNavigate("projects")}
-                  className="block mx-auto mt-3.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 font-bold text-white uppercase tracking-wider text-[10px] rounded-lg shadow-sm cursor-pointer"
-                >
-                  Join / Scaffold a Build Row
-                </button>
+              <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-400 text-xs italic shadow-3xs">
+                No active projects found.
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {myProjects.map((proj) => {
-                  // Compute simple progression ratio based on status
-                  const statusRatios: Record<ProjectStatus, number> = { 
-                    Planning: 15, 
-                    Fabricating: 50, 
-                    Testing: 80, 
-                    Finished: 100,
-                    Continuous: 100 
-                  };
-                  const percent = statusRatios[proj.status] || 0;
-                  
-                  // Compute project sponsorship offset ratio
-                  const bVal = proj.budget || 0;
-                  const itemCostSum = (proj.budgetItems || []).reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
-                  const isOverLimit = bVal > 0 && itemCostSum > bVal;
-
-                  const pUsers = Array.from(new Set([proj.leaderId, ...(proj.memberIds || [])])).filter(Boolean);
-
                   return (
                     <div 
                       key={proj.id}
-                      className="bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all relative group flex flex-col justify-between"
+                      onClick={() => onNavigate("projects", proj.id)}
+                      className="bg-white border border-slate-200 hover:border-blue-300 rounded-xl p-3 shadow-3xs hover:shadow-2xs transition-all cursor-pointer flex items-center justify-between gap-3 group"
                     >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-2 text-left">
-                          <div>
-                            <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                              proj.status === "Planning" ? "bg-slate-100 text-slate-650" :
-                              proj.status === "Fabricating" ? "bg-blue-50 text-blue-600 border border-blue-100" :
-                              proj.status === "Testing" ? "bg-amber-50 text-amber-700 border border-amber-100" :
-                              proj.status === "Continuous" ? "bg-sky-50 text-sky-700 border border-sky-100 animate-pulse" :
-                              "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            }`}>
-                              {proj.status}
-                            </span>
-                            <h4 className="font-bold text-sm text-slate-800 tracking-tight mt-1.5 font-display line-clamp-1">
-                              {proj.title}
-                            </h4>
-                          </div>
-                          
-                          <button
-                            onClick={() => onNavigate("projects", proj.id)}
-                            className="bg-slate-50 border border-slate-150 hover:bg-blue-50 hover:border-blue-200 text-slate-500 hover:text-blue-600 p-1.5 rounded-lg transition-colors cursor-pointer"
-                            title="Launch this workspace"
-                          >
-                            <ArrowRight className="size-4" />
-                          </button>
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="flex items-center gap-2 mb-1">
+                           <span className={`shrink-0 size-2 rounded-full ${
+                            proj.status === "Planning" ? "bg-slate-400" :
+                            proj.status === "Fabricating" ? "bg-blue-500" :
+                            proj.status === "Testing" ? "bg-amber-500" :
+                            proj.status === "Continuous" ? "bg-sky-500 animate-pulse" :
+                            "bg-emerald-500"
+                          }`} />
+                          <h4 className="font-bold text-xs text-slate-800 truncate group-hover:text-blue-700 transition-colors">
+                            {proj.title}
+                          </h4>
                         </div>
-
-                        <p className="text-[11.5px] text-slate-500 line-clamp-2 text-left leading-relaxed">
-                          {proj.description}
+                        <p className="text-[10px] font-mono text-slate-500 truncate">
+                           {proj.status} • {proj.memberIds ? proj.memberIds.length + 1 : 1} members
                         </p>
+                      </div>
+                      <ArrowRight className="size-3 text-slate-300 group-hover:text-blue-500 shrink-0 transition-colors" />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                        {/* Progress gauge visual bar */}
-                        {proj.status !== "Continuous" && (
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-slate-400 font-medium">Build Progression Status</span>
-                              <span className="font-bold text-slate-700 font-mono">{percent}% finished</span>
-                            </div>
-                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${
-                                  proj.status === "Planning" ? "bg-slate-400" :
-                                  proj.status === "Fabricating" ? "bg-blue-500" :
-                                  proj.status === "Testing" ? "bg-amber-500" :
-                                  "bg-emerald-500"
-                                }`} 
-                                style={{ width: `${percent}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
+          {/* UPCOMING COMPETITIONS WIDGET */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
+                <Trophy className="size-4 text-blue-600 animate-pulse" />
+                Upcoming Competitions
+              </h3>
+              <button 
+                onClick={() => onNavigate("competitions")}
+                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+              >
+                View All <ArrowRight className="size-3" />
+              </button>
+            </div>
 
-                        {/* Financial safeguard limits bar */}
-                        <div className="bg-slate-50/50 p-2.5 rounded-lg border border-slate-150 text-[10px] space-y-1">
-                          <div className="flex justify-between font-mono gap-1.5 items-center">
-                            <span className="text-slate-455 font-sans truncate shrink-0 select-none">Hardware cost ledger</span>
-                            <span 
-                              className="font-semibold truncate cursor-help select-none shrink-0"
-                              title={`Spent: LKR ${itemCostSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / Limit: LKR ${bVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                            >
-                              <span className={isOverLimit ? "text-rose-600 font-bold" : "text-slate-700"}>
-                                LKR {formatShortLKR(itemCostSum, itemCostSum < 100_000)}
-                              </span>
-                              <span className="text-slate-350 mx-0.5">/</span>
-                              <span className="text-slate-500 font-medium">
-                                {bVal > 0 ? `LKR ${formatShortLKR(bVal)} lim` : "no limit"}
-                              </span>
-                            </span>
-                          </div>
-                          <div className="relative w-full h-1 back-neutral-200 rounded-full bg-slate-200 overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${isOverLimit ? "bg-rose-500" : "bg-indigo-500"}`}
-                              style={{ width: bVal > 0 ? `${Math.min(100, (itemCostSum / bVal) * 100)}%` : "0%" }}
-                            />
-                          </div>
+            {upcomingComps.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-400 text-xs italic shadow-3xs">
+                No upcoming competitions are currently scheduled.
+              </div>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-3xs flex flex-col divide-y divide-slate-100">
+                {upcomingComps.map((comp) => {
+                  const isReg = (comp.registeredUserIds || []).includes(currentUser.uid);
+                  const isRem = (comp.remindUserIds || []).includes(currentUser.uid);
+                  const isTbd = comp.date === "TBD" || comp.date === "To Be Decided" || !comp.date;
+                  
+                  return (
+                    <div 
+                      key={comp.id}
+                      onClick={() => onNavigate("competitions")}
+                      className="py-2.5 first:pt-1 last:pb-1 flex items-center justify-between gap-3 group cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1 text-left">
+                        <h4 className="font-bold text-xs text-slate-800 truncate group-hover:text-blue-700 transition-colors">
+                          {comp.title}
+                        </h4>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                          <span>{isTbd ? "TBD" : new Date(comp.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="truncate">{comp.location}</span>
                         </div>
                       </div>
-
-                      {/* Footer: members and scheduling */}
-                      <div className="flex items-center justify-between pt-3.5 mt-3.5 border-t border-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-slate-400 font-mono font-bold select-none uppercase">Members:</span>
-                          <div className="flex -space-x-1.5 overflow-hidden">
-                            {pUsers.map((uid) => {
-                              const found = roster.find(u => u.uid === uid);
-                              if (!found) return null;
-                              return (
-                                <img
-                                  key={uid}
-                                  src={found.avatarUrl || undefined}
-                                  alt={found.displayName}
-                                  referrerPolicy="no-referrer"
-                                  className="inline-block size-5 rounded-md border border-white shrink-0"
-                                  title={found.displayName}
-                                />
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-1">
-                          {proj.startDate && (
-                            <span className="text-[9.5px] font-mono text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded flex items-center gap-1 select-none">
-                              <span className="text-[8px] uppercase font-semibold text-slate-400">Started:</span> {new Date(proj.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                            </span>
-                          )}
-                          {proj.deadline ? (
-                            <span className="text-[9.5px] font-mono text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded flex items-center gap-1 select-none">
-                              <Calendar className="size-3 text-slate-400" /> Due {new Date(proj.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                            </span>
-                          ) : (
-                            <span className="text-[9.5px] font-mono text-slate-400 bg-slate-50 border border-slate-150 border-dashed px-2 py-0.5 rounded flex items-center select-none italic">
-                              No due date
-                            </span>
-                          )}
-                        </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isReg && <span className="size-2 rounded-full bg-emerald-500" title="Participating" />}
+                        {isRem && <span className="size-2 rounded-full bg-blue-500" title="Alerts enabled" />}
+                        <ArrowRight className="size-3 text-slate-300 group-hover:text-blue-500 transition-colors ml-1" />
                       </div>
                     </div>
                   );

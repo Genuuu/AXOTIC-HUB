@@ -17,6 +17,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [subTeam, setSubTeam] = useState("Core Engineering");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [homepageUrl, setHomepageUrl] = useState("");
   
   const [compressing, setCompressing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -105,6 +106,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
       birthday: birthday || "",
       subTeam: subTeam,
       phoneNumber: phoneNumber.trim(),
+      homepageUrl: homepageUrl.trim(),
       avatarUrl: finalAvatar,
       joinedAt: new Date().toISOString(),
       ...(currentUser.isOfflineMock ? { isOfflineMock: true } : {})
@@ -200,6 +202,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
     setAvatarUrl("");
     setSubTeam("Core Engineering");
     setPhoneNumber("");
+    setHomepageUrl("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -383,6 +386,19 @@ export default function AddMember({ currentUser }: AddMemberProps) {
                     placeholder="e.g. +1 (555) 019-2834"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    🌐 Personal Homepage / Website
+                  </label>
+                  <input
+                    type="url"
+                    className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-lg p-2.5 text-xs outline-hidden text-slate-700 font-mono"
+                    placeholder="e.g. https://myportfolio.dev"
+                    value={homepageUrl}
+                    onChange={(e) => setHomepageUrl(e.target.value)}
                   />
                 </div>
               </div>

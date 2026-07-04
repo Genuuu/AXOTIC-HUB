@@ -128,7 +128,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
       allow update: if isSignedIn() && (
         isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds', 'type'])
       );
       allow delete: if isAdmin() || (isSignedIn() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
     }

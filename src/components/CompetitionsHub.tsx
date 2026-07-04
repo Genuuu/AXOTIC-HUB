@@ -28,7 +28,7 @@ import {
   AlertCircle,
   Check
 } from "lucide-react";
-import { UserProfile, Competition } from "../types";
+import { UserProfile, Competition, CompetitionType } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { CountdownTimer } from "./CountdownTimer";
 
@@ -36,6 +36,50 @@ interface CompetitionsHubProps {
   currentUser: UserProfile;
   roster: UserProfile[];
 }
+
+const renderDescriptionAsPoints = (desc: string) => {
+  if (!desc) {
+    return (
+      <p className="text-xs text-slate-450 dark:text-slate-400 leading-relaxed font-sans italic mt-1.5">
+        No competition scope provided.
+      </p>
+    );
+  }
+
+  // Split by newlines or by period followed by space
+  let items: string[] = [];
+  if (desc.includes("\n")) {
+    items = desc.split("\n").map(item => item.trim()).filter(Boolean);
+  } else {
+    items = desc.split(/(?<=\w)\.(?=\s|$)/).map(item => item.trim()).filter(Boolean);
+  }
+
+  const cleanItems = items.map(item => {
+    let clean = item.replace(/^[\s-•*◦▪\-]+/g, "").trim();
+    if (clean && !/[.!?]$/.test(clean)) {
+      clean += ".";
+    }
+    return clean;
+  }).filter(Boolean);
+
+  if (cleanItems.length === 0) {
+    return (
+      <p className="text-xs text-slate-450 dark:text-slate-400 leading-relaxed font-sans italic mt-1.5">
+        No competition scope provided.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="list-disc list-outside pl-4 space-y-1 text-xs text-slate-600 dark:text-slate-450 leading-relaxed font-sans mt-2">
+      {cleanItems.map((item, idx) => (
+        <li key={idx} className="pl-0.5">
+          {item}
+        </li>
+      ))}
+    </ul>
+  );
+};
 
 export default function CompetitionsHub({ currentUser, roster }: CompetitionsHubProps) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -48,8 +92,10 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newDate, setNewDate] = useState("");
+  const [isTbdDate, setIsTbdDate] = useState(false);
   const [newLocation, setNewLocation] = useState("");
   const [newLink, setNewLink] = useState("");
+  const [newType, setNewType] = useState<CompetitionType>("Other");
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,6 +110,101 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
   // Visual/Simulation Notification state
   const [simulatedAlert, setSimulatedAlert] = useState<{ title: string; msg: string } | null>(null);
 
+  // Diagnostic State variables
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<string[]>([]);
+  const [diagnosticStatus, setDiagnosticStatus] = useState<"idle" | "running" | "success" | "error">("idle");
+
+  const runDiagnostics = async () => {
+    setDiagnosticStatus("running");
+    setDiagnosticLogs([
+      "Initializing Security Verification Suite...", 
+      `Authenticated User UID: ${currentUser.uid}`, 
+      `User Role: ${currentUser.role}`, 
+      `Mock Environment: ${currentUser.isOfflineMock ? "YES (Local State Only)" : "NO (Live Firestore)"}`
+    ]);
+
+    if (currentUser.isOfflineMock) {
+      setDiagnosticLogs(prev => [
+        ...prev, 
+        "✓ PASS: Under Mock Environment, all writes are stored in LocalStorage.", 
+        "Note: To run live permission checks, make sure you toggle off simulated offline mode in Admin Settings."
+      ]);
+      setDiagnosticStatus("success");
+      return;
+    }
+
+    try {
+      // Step 1: Attempt to write a test document to the 'competitions' collection.
+      setDiagnosticLogs(prev => [...prev, "Testing 'competitions' CREATE rule..."]);
+      const testDocData = {
+        title: "🧪 DIAGNOSTIC TEST CHALLENGE",
+        description: "Auto-generated test entry to verify Firestore write permissions.",
+        date: "2026-12-31",
+        location: "Virtual Diagnostic Sandbox",
+        createdBy: currentUser.uid,
+        creatorName: currentUser.displayName || "Diagnostic Bot",
+        createdAt: new Date().toISOString(),
+        remindUserIds: [currentUser.uid],
+        isRegistered: false,
+        registeredUserIds: []
+      };
+
+      const testCollectionRef = collection(db, "competitions");
+      const docRef = await addDoc(testCollectionRef, testDocData);
+      setDiagnosticLogs(prev => [...prev, `✓ SUCCESS: Created test competition with doc ID: ${docRef.id}`]);
+
+      // Step 2: Attempt to update the test document (using allowed keys in rule 131)
+      setDiagnosticLogs(prev => [...prev, "Testing 'competitions' UPDATE rule (remindUserIds field)..."]);
+      await updateDoc(doc(db, "competitions", docRef.id), {
+        remindUserIds: [currentUser.uid, "diagnostic-sample"]
+      });
+      setDiagnosticLogs(prev => [...prev, "✓ SUCCESS: Updated remindUserIds on test document"]);
+
+      // Step 3: Attempt to delete the test document
+      setDiagnosticLogs(prev => [...prev, "Testing 'competitions' DELETE rule..."]);
+      await deleteDoc(doc(db, "competitions", docRef.id));
+      setDiagnosticLogs(prev => [...prev, "✓ SUCCESS: Cleaned up test document from 'competitions'"]);
+
+      // Step 4: Warn about the notifications collection
+      setDiagnosticLogs(prev => [...prev, "Testing '/notifications' security rule clearance..."]);
+      try {
+        const notifDocRef = await addDoc(collection(db, "notifications"), {
+          type: "diagnostic_test",
+          message: "Rules verification test",
+          targetId: "diagnostic-test-id",
+          createdBy: currentUser.uid,
+          createdAt: new Date().toISOString()
+        });
+        await deleteDoc(doc(db, "notifications", notifDocRef.id));
+        setDiagnosticLogs(prev => [...prev, "✓ SUCCESS: Verified notifications write & delete permissions."]);
+      } catch (notifErr: any) {
+        setDiagnosticLogs(prev => [
+          ...prev, 
+          `⚠ WARNING: Notifications write failed: ${notifErr.message || notifErr}`,
+          "Reason: Your user profile might be missing from the '/users' collection, causing isMember() rules to reject notification logs.",
+          "Action: Go to the 'Members Roster' and verify that you have a registered profile card."
+        ]);
+      }
+
+      setDiagnosticLogs(prev => [...prev, "🎉 ALL TESTS PASSED: Your user account has perfect read/write clearance for the competitions pipeline!"]);
+      setDiagnosticStatus("success");
+    } catch (err: any) {
+      console.error(err);
+      setDiagnosticLogs(prev => [
+        ...prev,
+        `❌ ERROR RECEIVED: ${err.message || err}`,
+        "--- DIAGNOSIS & REMEDIES ---",
+        `Error Code: ${err.code || "unknown"}`,
+        "1. If 'permission-denied': The security rules have blocked your write operation.",
+        "2. Make sure you are logged in. The rules block any writing if request.auth is null.",
+        "3. Confirm that 'createdBy' in your competition exactly matches your authenticated UID.",
+        "4. If trying to update a competition, verify you are either an Admin OR only modifying permitted fields: ['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds']."
+      ]);
+      setDiagnosticStatus("error");
+    }
+  };
+
   // Helper: Find user avatar by UID
   const getUserProfile = (uid: string): UserProfile | undefined => {
     return roster.find(r => r.uid === uid);
@@ -71,8 +212,9 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
 
   // Safe Date Formatter
   const formatCompDate = (dateStr: string) => {
+    if (dateStr === "TBD" || dateStr === "To Be Decided" || !dateStr) return "To Be Decided";
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
+    if (isNaN(d.getTime())) return "To Be Decided";
     return d.toLocaleDateString(undefined, { 
       weekday: "short", 
       month: "short", 
@@ -83,10 +225,17 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
 
   // Calculate days remaining or past
   const getDaysDiffString = (dateStr: string) => {
+    if (dateStr === "TBD" || dateStr === "To Be Decided" || !dateStr) {
+      return { text: "To Be Decided", isUpcoming: true, isCritical: false };
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const compDate = new Date(dateStr);
     compDate.setHours(0, 0, 0, 0);
+
+    if (isNaN(compDate.getTime())) {
+      return { text: "To Be Decided", isUpcoming: true, isCritical: false };
+    }
 
     const diffTime = compDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -195,7 +344,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
       setFormError("Competition Title is required.");
       return;
     }
-    if (!newDate) {
+    if (!isTbdDate && !newDate) {
       setFormError("Competition Date is required.");
       return;
     }
@@ -209,9 +358,10 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
     const compData = {
       title: newTitle.trim(),
       description: newDesc.trim(),
-      date: newDate,
+      date: isTbdDate ? "TBD" : newDate,
       location: newLocation.trim(),
       link: newLink.trim() || "",
+      type: newType,
       createdBy: currentUser.uid,
       creatorName: currentUser.displayName,
       createdAt: new Date().toISOString(),
@@ -277,8 +427,10 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
     setNewTitle("");
     setNewDesc("");
     setNewDate("");
+    setIsTbdDate(false);
     setNewLocation("");
     setNewLink("");
+    setNewType("Other");
     setNewIsRegistered(false);
     setNewRegisteredName("");
     setNewRegisteredUserIds([]);
@@ -615,6 +767,23 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                         <span>Planning</span>
                       </span>
                     )}
+
+                    {/* Competition Type Badge */}
+                    {(() => {
+                      const typeName = comp.type || "Other";
+                      return (
+                        <span className={`text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border ${
+                          typeName === "Battlebot" ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" :
+                          typeName === "Micromouse" ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20" :
+                          typeName === "Task Robot" ? "bg-amber-500/10 text-amber-600 dark:text-amber-450 border-amber-500/20" :
+                          typeName === "IOT" ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20" :
+                          typeName === "Idea pitch" ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" :
+                          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
+                        }`}>
+                          🏷️ {typeName}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Actions for Creator / Admin */}
@@ -635,9 +804,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                     <h3 className="text-sm font-black text-slate-800 dark:text-white leading-tight tracking-tight uppercase">
                       {comp.title}
                     </h3>
-                    <p className="text-xs text-slate-450 dark:text-slate-400 leading-relaxed mt-1.5 font-sans">
-                      {comp.description || "No competition scope provided."}
-                    </p>
+                    {renderDescriptionAsPoints(comp.description)}
                   </div>
 
                   {/* Countdown Timer Widget */}
@@ -895,6 +1062,96 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
         </div>
       )}
 
+      {/* SECURITY RULE & CONNECTION DIAGNOSTICS */}
+      <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200/65 dark:border-slate-800 rounded-2xl p-4 md:p-5 mt-6 text-left shadow-3xs">
+        <div className="flex items-center justify-between border-b border-slate-200/55 dark:border-slate-800 pb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-blue-500/10 text-blue-500 rounded-lg">
+              <Sparkles className="size-4 animate-pulse" />
+            </span>
+            <div>
+              <h3 className="text-xs font-black uppercase text-slate-800 dark:text-slate-200 tracking-wider">
+                Firestore Security Rule & Write Diagnostics
+              </h3>
+              <p className="text-[10px] text-slate-450 dark:text-slate-500 mt-0.5">
+                Check database connectivity, user profile membership, and collection write clearance.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setIsDiagnosticOpen(!isDiagnosticOpen);
+              if (!isDiagnosticOpen && diagnosticLogs.length === 0) {
+                runDiagnostics();
+              }
+            }}
+            className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 font-extrabold text-[10.5px] rounded-lg shadow-3xs cursor-pointer select-none transition-all duration-150 flex items-center gap-1.5"
+          >
+            {isDiagnosticOpen ? "Hide Console" : "Run Diagnostics Suite"}
+          </button>
+        </div>
+
+        {isDiagnosticOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3.5 space-y-3"
+          >
+            {/* Quick Status indicators */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-2.5 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-850 rounded-xl flex items-center gap-2 text-xs">
+                <span className={`size-2.5 rounded-full ${currentUser ? "bg-emerald-500" : "bg-red-500"}`} />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Auth State:</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{currentUser ? "Signed In" : "Signed Out"}</span>
+              </div>
+              <div className="p-2.5 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-850 rounded-xl flex items-center gap-2 text-xs">
+                <span className={`size-2.5 rounded-full ${currentUser.role === "admin" || currentUser.role === "member" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Profile Clearance:</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200 capitalize">{currentUser.role || "Unknown"}</span>
+              </div>
+              <div className="p-2.5 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-850 rounded-xl flex items-center gap-2 text-xs">
+                <span className={`size-2.5 rounded-full ${diagnosticStatus === "success" ? "bg-emerald-500" : diagnosticStatus === "error" ? "bg-red-500" : "bg-blue-500"}`} />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Test Outcome:</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200 capitalize">{diagnosticStatus}</span>
+              </div>
+            </div>
+
+            {/* Simulated Live Diagnostic Terminal logs */}
+            <div className="bg-slate-950 text-slate-100 rounded-xl p-3.5 font-mono text-[10.5px] leading-relaxed border border-slate-900 space-y-1.5 max-h-48 overflow-y-auto shadow-inner text-left">
+              {diagnosticLogs.map((log, index) => {
+                let colorClass = "text-slate-300";
+                if (log.startsWith("✓")) colorClass = "text-emerald-400 font-bold";
+                else if (log.startsWith("❌") || log.startsWith("1.") || log.startsWith("2.") || log.startsWith("3.") || log.startsWith("4.")) colorClass = "text-rose-400";
+                else if (log.startsWith("⚠")) colorClass = "text-amber-400 font-bold";
+                else if (log.startsWith("Initializing") || log.startsWith("Testing")) colorClass = "text-cyan-400 font-semibold";
+                
+                return (
+                  <div key={index} className={`${colorClass} whitespace-pre-wrap`}>
+                    {log}
+                  </div>
+                );
+              })}
+              {diagnosticStatus === "running" && (
+                <div className="text-blue-400 animate-pulse flex items-center gap-1.5">
+                  <span className="size-1.5 bg-blue-400 rounded-full animate-ping" />
+                  Running automated sandbox queries...
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={runDiagnostics}
+                disabled={diagnosticStatus === "running"}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10.5px] font-bold rounded-lg shadow-3xs cursor-pointer select-none transition-all flex items-center gap-1"
+              >
+                Re-Run Verification Suite
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
       {/* Add Competition Overlay Dialog Modal */}
       <AnimatePresence>
         {isAddOpen && (
@@ -955,12 +1212,32 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                   />
                 </div>
 
+                {/* Competition Type */}
+                <div>
+                  <label className="block text-[9px] font-black text-slate-400 uppercase font-mono mb-1.5 tracking-wider">Competition Type *</label>
+                  <select
+                    value={newType}
+                    onChange={(e) => setNewType(e.target.value as CompetitionType)}
+                    className="w-full text-xs px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500/50 cursor-pointer"
+                  >
+                    <option value="Battlebot">🤖 Battlebot</option>
+                    <option value="Micromouse">🐭 Micromouse</option>
+                    <option value="Task Robot">🦾 Task Robot</option>
+                    <option value="IOT">🌐 IOT</option>
+                    <option value="Idea pitch">💡 Idea pitch</option>
+                    <option value="Other">✨ Other</option>
+                  </select>
+                </div>
+
                 {/* Description */}
                 <div>
-                  <label className="block text-[9px] font-black text-slate-400 uppercase font-mono mb-1.5 tracking-wider">Scope / Description</label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase font-mono tracking-wider">Scope / Description</label>
+                    <span className="text-[8px] font-bold text-emerald-500 uppercase font-mono">Bullet Points Split By Period or Newline</span>
+                  </div>
                   <textarea
                     rows={3}
-                    placeholder="Provide details about registration deadlines, rules, pit locations, and active design assemblies involved..."
+                    placeholder="Provide details, each separated by a period or newline (e.g. FRC regional match. 60 schools. Custom chassis.)"
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
                     className="w-full text-xs px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500/50 placeholder:text-slate-400 resize-none"
@@ -971,13 +1248,32 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Date */}
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase font-mono mb-1.5 tracking-wider">Challenge Date *</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[9px] font-black text-slate-400 uppercase font-mono tracking-wider">Challenge Date *</label>
+                      <label className="flex items-center gap-1 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isTbdDate}
+                          onChange={(e) => {
+                            setIsTbdDate(e.target.checked);
+                            if (e.target.checked) setNewDate("");
+                          }}
+                          className="rounded text-blue-600 focus:ring-blue-500 size-3 cursor-pointer"
+                        />
+                        <span className="text-[9px] font-bold uppercase font-mono text-slate-500">TBD</span>
+                      </label>
+                    </div>
                     <input
                       type="date"
-                      required
-                      value={newDate}
+                      required={!isTbdDate}
+                      disabled={isTbdDate}
+                      value={isTbdDate ? "" : newDate}
                       onChange={(e) => setNewDate(e.target.value)}
-                      className="w-full text-xs px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500/50"
+                      className={`w-full text-xs px-3.5 py-2.5 border rounded-xl text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500/50 ${
+                        isTbdDate
+                          ? "bg-slate-100 dark:bg-slate-850/50 border-slate-250 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                          : "bg-slate-50 dark:bg-slate-900 border-slate-200/60 dark:border-slate-800"
+                      }`}
                     />
                   </div>
 

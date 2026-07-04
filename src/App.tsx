@@ -149,6 +149,7 @@ export default function App() {
   const [profilePhone, setProfilePhone] = useState("");
   const [profileBirthday, setProfileBirthday] = useState("");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
+  const [profileHomepageUrl, setProfileHomepageUrl] = useState("");
   const [compressingProfilePic, setCompressingProfilePic] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -159,6 +160,7 @@ export default function App() {
       setProfilePhone(currentUser.phoneNumber || "");
       setProfileBirthday(currentUser.birthday || "");
       setProfileAvatarUrl(currentUser.avatarUrl || "");
+      setProfileHomepageUrl(currentUser.homepageUrl || "");
       setProfileError("");
       setIsEditProfileOpen(true);
     }
@@ -236,7 +238,8 @@ export default function App() {
       displayName: profileDisplayName.trim(),
       phoneNumber: profilePhone.trim(),
       birthday: profileBirthday,
-      avatarUrl: profileAvatarUrl
+      avatarUrl: profileAvatarUrl,
+      homepageUrl: profileHomepageUrl.trim()
     };
 
     if (currentUser.isOfflineMock) {
@@ -255,7 +258,8 @@ export default function App() {
               displayName: profileDisplayName.trim(),
               phoneNumber: profilePhone.trim(),
               birthday: profileBirthday,
-              avatarUrl: profileAvatarUrl
+              avatarUrl: profileAvatarUrl,
+              homepageUrl: profileHomepageUrl.trim()
             };
             localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
           }
@@ -272,7 +276,8 @@ export default function App() {
           displayName: profileDisplayName.trim(),
           phoneNumber: profilePhone.trim(),
           birthday: profileBirthday,
-          avatarUrl: profileAvatarUrl
+          avatarUrl: profileAvatarUrl,
+          homepageUrl: profileHomepageUrl.trim()
         }, { merge: true });
 
         // Update local auth cache as well
@@ -1664,6 +1669,19 @@ export default function App() {
                     onChange={(e) => setProfileBirthday(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1 px-1">
+                  🌐 Personal Homepage / Website
+                </label>
+                <input
+                  type="url"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 rounded-xl px-3.5 py-2.5 text-xs outline-hidden transition-all text-slate-800 dark:text-slate-100 font-mono"
+                  placeholder="e.g. https://myportfolio.dev"
+                  value={profileHomepageUrl}
+                  onChange={(e) => setProfileHomepageUrl(e.target.value)}
+                />
               </div>
 
               {/* Actions Footer */}
