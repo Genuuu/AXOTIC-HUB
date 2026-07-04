@@ -914,9 +914,9 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
               transition={{ type: "spring", stiffness: 350, damping: 28 }}
-              className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-200/40 dark:border-slate-800/80 z-10"
+              className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-200/40 dark:border-slate-800/80 z-10 flex flex-col max-h-[85vh]"
             >
-              <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
+              <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/60 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="size-9 rounded-xl bg-blue-600 flex items-center justify-center text-white">
                     <Trophy className="size-4.5" />
@@ -934,7 +934,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                 </button>
               </div>
 
-              <form onSubmit={handleAddCompetition} className="p-6 space-y-4">
+              <form onSubmit={handleAddCompetition} className="p-6 space-y-4 overflow-y-auto flex-1 text-left">
                 {formError && (
                   <div className="p-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-xs flex items-center gap-2">
                     <AlertCircle className="size-4 shrink-0" />

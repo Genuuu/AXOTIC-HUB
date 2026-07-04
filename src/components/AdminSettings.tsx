@@ -52,9 +52,17 @@ interface AdminSettingsProps {
   currentUser: UserProfile;
   isDark?: boolean;
   onToggleTheme?: () => void;
+  themeMode?: "light" | "dark" | "system";
+  onChangeThemeMode?: (mode: "light" | "dark" | "system") => void;
 }
 
-export default function AdminSettings({ currentUser, isDark = false, onToggleTheme }: AdminSettingsProps) {
+export default function AdminSettings({ 
+  currentUser, 
+  isDark = false, 
+  onToggleTheme,
+  themeMode,
+  onChangeThemeMode
+}: AdminSettingsProps) {
   const [activeSubTab, setActiveSubTab] = useState<"general" | "onboard" | "logs" | "preferences" | "public_page">(() => {
     return currentUser?.role === "admin" ? "general" : "preferences";
   });
@@ -1291,15 +1299,19 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                 </p>
 
                 {/* Theme Options */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Light theme choice */}
                   <button
                     type="button"
                     onClick={() => {
-                      if (isDark && onToggleTheme) onToggleTheme();
+                      if (onChangeThemeMode) {
+                        onChangeThemeMode("light");
+                      } else if (isDark && onToggleTheme) {
+                        onToggleTheme();
+                      }
                     }}
                     className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
-                      !isDark
+                      (themeMode ? themeMode === "light" : !isDark)
                         ? "border-blue-500 bg-blue-50/25 dark:bg-blue-950/10 ring-2 ring-blue-500/20"
                         : "border-slate-200 dark:border-slate-800 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     }`}
@@ -1315,10 +1327,14 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                   <button
                     type="button"
                     onClick={() => {
-                      if (!isDark && onToggleTheme) onToggleTheme();
+                      if (onChangeThemeMode) {
+                        onChangeThemeMode("dark");
+                      } else if (!isDark && onToggleTheme) {
+                        onToggleTheme();
+                      }
                     }}
                     className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
-                      isDark
+                      (themeMode ? themeMode === "dark" : isDark)
                         ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20 ring-2 ring-blue-500/20"
                         : "border-slate-200 dark:border-slate-800 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     }`}
@@ -1328,6 +1344,27 @@ export default function AdminSettings({ currentUser, isDark = false, onToggleThe
                     </div>
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Dark Mode</span>
                     <span className="text-[10px] text-slate-400 block mt-0.5">Cosmic eye-safe dark</span>
+                  </button>
+
+                  {/* System Auto Sync choice */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onChangeThemeMode) {
+                        onChangeThemeMode("system");
+                      }
+                    }}
+                    className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
+                      (themeMode ? themeMode === "system" : false)
+                        ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20 ring-2 ring-blue-500/20"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <div className="size-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center mb-3">
+                      <Laptop className="size-4.5 text-slate-500 dark:text-slate-400" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">System Auto</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Sync with mobile OS</span>
                   </button>
                 </div>
               </div>

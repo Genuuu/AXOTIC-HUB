@@ -61,25 +61,78 @@ export default function App() {
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [showUserPopover, setShowUserPopover] = useState(false);
   
-  // Theme state: light or dark
+  // Theme state: "light" | "dark" | "system"
+  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("axotic_theme_mode") as "light" | "dark" | "system" | null;
+      if (saved) return saved;
+      const legacy = localStorage.getItem("axotic_theme");
+      if (legacy) return legacy === "dark" ? "dark" : "light";
+    }
+    return "system";
+  });
+
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("axotic_theme");
-      if (saved) return saved === "dark";
+      const saved = localStorage.getItem("axotic_theme_mode") as "light" | "dark" | "system" | null;
+      if (saved === "dark") return true;
+      if (saved === "light") return false;
       return window.matchMedia("(prefers-color-scheme: dark)").matches;
     }
     return false;
   });
 
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("axotic_theme", "dark");
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    
+    const updateTheme = () => {
+      let darkValue = false;
+      if (themeMode === "system") {
+        darkValue = mediaQuery.matches;
+      } else {
+        darkValue = themeMode === "dark";
+      }
+      setIsDark(darkValue);
+      
+      if (darkValue) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+
+    updateTheme();
+    localStorage.setItem("axotic_theme_mode", themeMode);
+    localStorage.setItem("axotic_theme", themeMode === "system" ? (mediaQuery.matches ? "dark" : "light") : themeMode);
+
+    const handleChange = () => {
+      if (themeMode === "system") {
+        updateTheme();
+      }
+    };
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleChange);
     } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("axotic_theme", "light");
+      mediaQuery.addListener(handleChange);
     }
-  }, [isDark]);
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, [themeMode]);
+
+  const cycleThemeMode = () => {
+    setThemeMode((prev) => {
+      if (prev === "light") return "dark";
+      if (prev === "dark") return "system";
+      return "light";
+    });
+  };
 
   // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions"
   const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions">("home");
@@ -710,8 +763,8 @@ export default function App() {
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   whileHover={{ scale: 1.05 }}
-                  onClick={() => setIsDark(!isDark)}
-                  title="Toggle visual theme"
+                  onClick={cycleThemeMode}
+                  title={`Toggle visual theme (Current: ${themeMode})`}
                   className="size-8 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-400 hover:text-amber-400 transition-colors flex items-center justify-center cursor-pointer relative overflow-hidden"
                 >
                   <AnimatePresence mode="wait" initial={false}>
@@ -1049,8 +1102,8 @@ export default function App() {
                   <motion.button
                     whileTap={{ scale: 0.92 }}
                     whileHover={{ scale: 1.05 }}
-                    onClick={() => setIsDark(!isDark)}
-                    title="Toggle visual theme"
+                    onClick={cycleThemeMode}
+                    title={`Toggle visual theme (Current: ${themeMode})`}
                     className="size-9 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700 text-slate-650 dark:text-slate-350 transition-colors flex items-center justify-center cursor-pointer shadow-3xs relative overflow-hidden"
                   >
                     <AnimatePresence mode="wait" initial={false}>
@@ -1355,6 +1408,8 @@ export default function App() {
                         currentUser={currentUser} 
                         isDark={isDark} 
                         onToggleTheme={() => setIsDark(!isDark)}
+                        themeMode={themeMode}
+                        onChangeThemeMode={setThemeMode}
                       />
                     </motion.div>
                   )}
