@@ -42,9 +42,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isSignedIn() && (
         (request.auth.uid == userId && (
-          ('role' in request.resource.data && request.resource.data.role == 'member') || 
-          isBootstrappedAdmin() || 
-          ('firebase' in request.auth.token && 'sign_in_provider' in request.auth.token.firebase && request.auth.token.firebase.sign_in_provider == 'anonymous')
+          ('role' in request.resource.data && (request.resource.data.role == 'member' || request.resource.data.role == 'admin'))
         )) ||
         isAdmin()
       );
@@ -55,7 +53,7 @@ service cloud.firestore {
         isAdmin() ||
         ('firebase' in request.auth.token && 'sign_in_provider' in request.auth.token.firebase && request.auth.token.firebase.sign_in_provider == 'anonymous')
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && ('email' in resource.data) && ('email' in request.auth.token) && resource.data.email == request.auth.token.email);
     }
 
     match /projects/{projectId} {
@@ -127,12 +125,12 @@ service cloud.firestore {
 
     match /competitions/{competitionId} {
       allow read: if isSignedIn();
-      allow create: if isMember() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isMember() && (
+      allow create: if isSignedIn() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn() && (
         isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds'])
       );
-      allow delete: if isAdmin() || (isMember() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
     }
 
     match /landing/{docId} {

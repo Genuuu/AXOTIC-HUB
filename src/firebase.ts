@@ -73,6 +73,11 @@ export async function createAdminLog(
     return;
   }
   
+  if (currentUser.role !== "admin") {
+    console.log("Skipping live admin log for non-admin user:", currentUser.email);
+    return;
+  }
+  
   try {
     await addDoc(collection(db, "admin_logs"), {
       action,

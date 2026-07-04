@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db, createGlobalNotification } from "../firebase";
+import { db, createGlobalNotification, handleFirestoreError, OperationType } from "../firebase";
 import { 
   collection, 
   onSnapshot, 
@@ -165,6 +165,7 @@ export default function IdeasBoard({ currentUser, roster, onPromoteToProject }: 
       setIdeas(items);
     }, (err) => {
       console.error("Failed to fetch ideas real-time.", err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.GET, "ideas");
     });
 
     return () => unsubscribe();

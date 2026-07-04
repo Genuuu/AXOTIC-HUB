@@ -45,9 +45,6 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSubTeam, setActiveSubTeam] = useState<string>("All");
 
-  // Admin view toggle: "standard" | "admin"
-  const [adminViewMode, setAdminViewMode] = useState<"standard" | "admin" >("standard");
-
   // In-place profile override editing states
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<UserRole>("member");
@@ -358,39 +355,6 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
         </div>
       </div>
 
-      {/* View Mode Switcher / Action Bar (Only visible to Administrators) */}
-      {isAdmin && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-55 border border-slate-200/80 p-4 rounded-2xl text-left">
-          <div className="space-y-1">
-            <span className="text-[10px] uppercase font-mono font-bold text-blue-600 tracking-wider">Access Clearance Panel</span>
-            <h4 className="text-sm font-bold text-slate-800">Workspace Member Directory Console</h4>
-          </div>
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs shrink-0">
-            <button
-              type="button"
-              onClick={() => setAdminViewMode("standard")}
-              className={`px-4 py-1.8 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                adminViewMode === "standard"
-                  ? "bg-white text-slate-800 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Standard Grid
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdminViewMode("admin")}
-              className={`px-4 py-1.8 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                adminViewMode === "admin"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <Shield className="size-3.5" /> Admin Console
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Directory Filter & Search Control Bar */}
       <div id="roster-filter-hub" className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs text-left space-y-4">
@@ -460,9 +424,11 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
         </div>
       </div>
 
-      {/* Directory Grid of Beautiful Member Cards */}
-      {filteredRoster.length === 0 ? (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
+      {/* Directory Grid of Beautiful Member Cards & Presence Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        <div className="lg:col-span-3 space-y-6">
+          {filteredRoster.length === 0 ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
           <div className="size-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto border border-slate-100 text-slate-400">
             <User className="size-6 stroke-[1.5]" />
           </div>
@@ -471,7 +437,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
             Adjust your search keywords or select another sub-team tab to expand results.
           </p>
         </div>
-      ) : adminViewMode === "admin" && isAdmin ? (
+      ) : false ? (
         /* ==================== ADMINISTRATIVE CONSOLE VIEW ==================== */
         <div id="roster-admin-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRoster.map((member) => {
@@ -518,8 +484,12 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                       </div>
 
                       <div className="text-left min-w-0">
-                        <h3 className="font-display font-extrabold text-sm text-slate-800 tracking-tight truncate group-hover:text-blue-600 transition-colors">
-                          {member.displayName}
+                        <h3 className="font-display font-extrabold text-sm text-slate-800 tracking-tight truncate group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                          <span className="truncate">{member.displayName}</span>
+                          <span 
+                            className={`inline-block size-2 rounded-full shrink-0 ${isOnline ? "bg-emerald-500 animate-[pulse_1.5s_infinite]" : "bg-slate-300"}`} 
+                            title={isOnline ? "Online" : "Offline"} 
+                          />
                         </h3>
                         <p className="text-[10px] text-slate-400 font-mono truncate">{member.email}</p>
                         
@@ -790,8 +760,12 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                       </div>
 
                       <div className="text-left min-w-0">
-                        <h3 className="font-display font-extrabold text-sm text-slate-800 tracking-tight truncate group-hover:text-blue-600 transition-colors">
-                          {member.displayName}
+                        <h3 className="font-display font-extrabold text-sm text-slate-800 tracking-tight truncate group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                          <span className="truncate">{member.displayName}</span>
+                          <span 
+                            className={`inline-block size-2 rounded-full shrink-0 ${isOnline ? "bg-emerald-500 animate-[pulse_1.5s_infinite]" : "bg-slate-300"}`} 
+                            title={isOnline ? "Online" : "Offline"} 
+                          />
                         </h3>
                         <p className="text-[10px] text-slate-400 font-mono truncate">{member.email}</p>
                         {member.phoneNumber && (
@@ -929,6 +903,95 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
           })}
         </div>
       )}
+    </div>
+
+    {/* Side Panel for Online Members */}
+    <div className="lg:col-span-1 space-y-4">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden text-left">
+        <div className="bg-slate-900 px-4 py-3.5 flex items-center justify-between text-white">
+          <div className="flex items-center space-x-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <h3 className="font-display text-xs font-black uppercase tracking-wider">Who's Online</h3>
+          </div>
+          <span className="text-[10px] font-mono bg-emerald-500/10 border border-emerald-400/20 px-2.5 py-0.5 rounded-full text-emerald-400 font-bold">
+            {sortedRoster.filter(m => {
+              const isMe = m.uid === currentUser.uid;
+              if (isMe) return true;
+              if (m.isOnline !== true) return false;
+              if (!m.lastActiveAt) return false;
+              return Date.now() - new Date(m.lastActiveAt).getTime() < 5 * 60 * 1000;
+            }).length} Active
+          </span>
+        </div>
+
+        <div className="p-4 space-y-3.5">
+          {sortedRoster.filter(m => {
+            const isMe = m.uid === currentUser.uid;
+            if (isMe) return true;
+            if (m.isOnline !== true) return false;
+            if (!m.lastActiveAt) return false;
+            return Date.now() - new Date(m.lastActiveAt).getTime() < 5 * 60 * 1000;
+          }).length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-xs text-slate-400 italic font-medium">No team members online.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 max-h-[450px] overflow-y-auto pr-0.5 space-y-2.5">
+              {sortedRoster.filter(m => {
+                const isMe = m.uid === currentUser.uid;
+                if (isMe) return true;
+                if (m.isOnline !== true) return false;
+                if (!m.lastActiveAt) return false;
+                return Date.now() - new Date(m.lastActiveAt).getTime() < 5 * 60 * 1000;
+              }).map((member) => {
+                const isMe = member.uid === currentUser.uid;
+                let badgeColor = "bg-slate-50 text-slate-500 border-slate-150";
+                if (member.subTeam === "Software") badgeColor = "bg-blue-50 text-blue-700 border-blue-100";
+                else if (member.subTeam === "Hardware") badgeColor = "bg-purple-50 text-purple-700 border-purple-100";
+                else if (member.subTeam === "Design") badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-100";
+                else if (member.subTeam === "Business") badgeColor = "bg-amber-50 text-amber-700 border-amber-100";
+
+                return (
+                  <div key={member.uid} className="flex items-center justify-between pt-2.5 first:pt-0">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="relative shrink-0">
+                        <img
+                          referrerPolicy="no-referrer"
+                          src={member.avatarUrl || undefined}
+                          alt={member.displayName}
+                          className="size-8 rounded-lg border border-slate-200 bg-slate-50 object-cover"
+                        />
+                        <span className="absolute -bottom-0.5 -right-0.5 size-2 bg-emerald-500 rounded-full ring-2 ring-white animate-[pulse_1.5s_infinite]" />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <p className="text-xs font-bold text-slate-800 truncate flex items-center gap-1">
+                          {member.displayName}
+                          {isMe && <span className="text-[9px] font-mono font-black text-blue-600">(You)</span>}
+                        </p>
+                        <span className="text-[10px] text-slate-400 truncate block">{member.email}</span>
+                      </div>
+                    </div>
+
+                    <span className={`px-1.5 py-0.5 text-[8px] font-bold font-mono uppercase tracking-wider rounded border shrink-0 ${badgeColor}`}>
+                      {member.subTeam || "Core"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          <div className="pt-3 border-t border-slate-100 text-[10px] text-slate-400 flex items-center gap-1 font-mono">
+            <span className="size-1.5 bg-emerald-500 rounded-full inline-block animate-ping" />
+            <span>Auto-refreshes in real-time</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
       {/* Custom Deletion Dialog Overlay */}
       {deleteConfirmUser && (

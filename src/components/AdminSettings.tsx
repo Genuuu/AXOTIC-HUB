@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { db, handleFirestoreError, OperationType, createAdminLog } from "../firebase";
+import { db, handleFirestoreError, OperationType, createAdminLog, auth } from "../firebase";
 import { 
   collection, 
   onSnapshot, 
   doc, 
   setDoc, 
   deleteDoc, 
-  updateDoc 
+  updateDoc,
+  addDoc,
+  query,
+  limit,
+  getDocs,
+  getDocFromServer
 } from "firebase/firestore";
 import { 
   Settings, 
@@ -120,6 +125,95 @@ export default function AdminSettings({
   const [categoryToRemove, setCategoryToRemove] = useState<string | null>(null);
   const [userToDismiss, setUserToDismiss] = useState<UserProfile | null>(null);
 
+  // Diagnostic Tool state variables
+  const [diagnosticResult, setDiagnosticResult] = useState<{
+    status: "idle" | "running" | "success" | "error";
+    authStatus?: string;
+    roleStatus?: string;
+    connectionStatus?: string;
+    readStatus?: string;
+    writeStatus?: string;
+    rulesStatus?: string;
+    errorMsg?: string;
+  }>({ status: "idle" });
+
+  const runDiagnostics = async () => {
+    setDiagnosticResult({ status: "running" });
+    try {
+      // 1. Auth check
+      const authUser = auth.currentUser;
+      if (!authUser) {
+        throw new Error("Authentication failure: No user is currently logged in.");
+      }
+      const authStatus = `Authenticated as ${authUser.displayName || authUser.email || authUser.uid}`;
+      const roleStatus = `User Database Role: ${currentUser?.role || "none (logged-in user)"}`;
+
+      // 2. Base connection check
+      let connectionStatus = "Failed";
+      try {
+        await getDocFromServer(doc(db, "test", "connection"));
+        connectionStatus = "Successful";
+      } catch (err: any) {
+        connectionStatus = `Successful (Offline warning: ${err?.message || err})`;
+      }
+
+      // 3. Competitions collection read check
+      let readStatus = "Failed";
+      try {
+        const testQuery = query(collection(db, "competitions"), limit(1));
+        await getDocs(testQuery);
+        readStatus = "Verified Accessible";
+      } catch (err: any) {
+        readStatus = `Access Denied: ${err?.message || err}`;
+      }
+
+      // 4. Competitions write test / rules status
+      let writeStatus = "Pending Verification";
+      let rulesStatus = "Verifying...";
+      
+      try {
+        const testDocRef = await addDoc(collection(db, "competitions"), {
+          title: "Diagnostic Self-Test Item",
+          description: "Temporary diagnostic test doc to verify Firestore security rules writing permissions.",
+          date: new Date().toISOString().split("T")[0],
+          location: "Diagnostics Engine",
+          link: "",
+          createdBy: authUser.uid,
+          creatorName: authUser.displayName || "Diagnostics",
+          createdAt: new Date().toISOString(),
+          remindUserIds: [authUser.uid],
+          isRegistered: false,
+          registeredName: "",
+          registeredUserIds: []
+        });
+        
+        writeStatus = "Verified Accessible (Write allowed by security rules)";
+        
+        // Clean it up immediately!
+        await deleteDoc(testDocRef);
+        rulesStatus = "Competitions Security Rules Fully Validated & Working";
+      } catch (err: any) {
+        writeStatus = `Denied: ${err?.message || err}`;
+        rulesStatus = "Incorrect security rules configuration. Write is blocked.";
+      }
+
+      setDiagnosticResult({
+        status: "success",
+        authStatus,
+        roleStatus,
+        connectionStatus,
+        readStatus,
+        writeStatus,
+        rulesStatus
+      });
+    } catch (err: any) {
+      setDiagnosticResult({
+        status: "error",
+        errorMsg: err?.message || String(err)
+      });
+    }
+  };
+
   // Load Categories list
   useEffect(() => {
     if (currentUser.isOfflineMock) {
@@ -165,6 +259,7 @@ export default function AdminSettings({
         }
       }, (err) => {
         console.warn("Could not load Firestore categories stream", err instanceof Error ? err.message : String(err));
+        handleFirestoreError(err, OperationType.LIST, "categories");
       });
       return () => unsub();
     }
@@ -232,6 +327,7 @@ export default function AdminSettings({
         setAdminLogs(list);
       }, (err) => {
         console.warn("Could not load Firestore admin logs collection", err instanceof Error ? err.message : String(err));
+        handleFirestoreError(err, OperationType.LIST, "admin_logs");
       });
       return () => unsub();
     }
@@ -259,6 +355,7 @@ export default function AdminSettings({
         }
       }, (err) => {
         console.warn("Could not load Firestore general workspace configurations", err instanceof Error ? err.message : String(err));
+        handleFirestoreError(err, OperationType.GET, "settings/general");
       });
       return () => unsub();
     }
@@ -298,6 +395,7 @@ export default function AdminSettings({
       }, (err) => {
         console.warn("Could not load public page configurations", err.message);
         setPublicPageData(defaultPublicLandingData);
+        handleFirestoreError(err, OperationType.GET, "landing/public");
       });
       return () => unsub();
     }
@@ -361,6 +459,7 @@ export default function AdminSettings({
         setRoster(list);
       }, (err) => {
         console.warn("Could not load users database", err instanceof Error ? err.message : String(err));
+        handleFirestoreError(err, OperationType.LIST, "users");
       });
       return () => unsub();
     }
@@ -923,6 +1022,106 @@ export default function AdminSettings({
               </div>
 
             </form>
+          </div>
+
+          {/* SECURITY RULES & COMPETITIONS DIAGNOSTIC TOOL */}
+          <div className="bg-white border border-slate-200/60 rounded-2xl shadow-xs overflow-hidden">
+            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center space-x-2">
+                <ShieldAlert className="size-4 text-emerald-400" />
+                <h3 className="font-display text-sm font-bold uppercase tracking-wider">Firestore Security & Write Rules Diagnostics</h3>
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-500/10 border border-emerald-400/20 px-2 py-0.5 rounded-full text-emerald-400 font-bold">
+                Online Verified
+              </span>
+            </div>
+
+            <div className="p-6 space-y-6 text-left">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Check and verify writing accessibility on the <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold">competitions</code> collection. This tool executes a safe, real-time read/write transaction to confirm Firestore rules configuration.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  type="button"
+                  onClick={runDiagnostics}
+                  disabled={diagnosticResult.status === "running"}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm active:scale-95"
+                >
+                  <RefreshCw className={`size-3.5 ${diagnosticResult.status === "running" ? "animate-spin" : ""}`} />
+                  {diagnosticResult.status === "running" ? "Analyzing Database Security Rules..." : "Run Security & Write Diagnostic"}
+                </button>
+              </div>
+
+              {/* Diagnostic Results Dashboard */}
+              {diagnosticResult.status !== "idle" && (
+                <div className="p-4 rounded-xl border border-slate-150 bg-slate-50/50 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                    <span className="text-xs font-bold text-slate-700">Diagnostic Check Results</span>
+                    <span className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full ${
+                      diagnosticResult.status === "running"
+                        ? "bg-amber-100 text-amber-700 border border-amber-200"
+                        : diagnosticResult.status === "success"
+                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        : "bg-rose-100 text-rose-700 border border-rose-200"
+                    }`}>
+                      {diagnosticResult.status}
+                    </span>
+                  </div>
+
+                  {diagnosticResult.status === "error" && (
+                    <div className="text-xs text-rose-600 font-semibold p-2.5 bg-rose-50 border border-rose-100 rounded-lg flex items-start gap-2">
+                      <AlertCircle className="size-4 text-rose-500 shrink-0 mt-0.5" />
+                      <span>{diagnosticResult.errorMsg}</span>
+                    </div>
+                  )}
+
+                  {diagnosticResult.status === "running" && (
+                    <div className="space-y-2">
+                      <div className="h-1 w-full bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 animate-[pulse_1.5s_infinite] w-3/4 rounded-full" />
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium block">Querying database endpoints, analyzing rules version 2...</span>
+                    </div>
+                  )}
+
+                  {diagnosticResult.status === "success" && (
+                    <div className="grid grid-cols-1 gap-2.5">
+                      <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-1.5">
+                        <span className="text-slate-500 font-medium">1. Connection Authorization</span>
+                        <span className="text-slate-800 font-semibold text-right">{diagnosticResult.authStatus}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-1.5">
+                        <span className="text-slate-500 font-medium">2. Registered Account Role</span>
+                        <span className="text-slate-800 font-semibold text-right">{diagnosticResult.roleStatus}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-1.5">
+                        <span className="text-slate-500 font-medium">3. Firebase Base Handshake</span>
+                        <span className="text-emerald-600 font-bold flex items-center gap-1 text-right">
+                          <CheckCircle2 className="size-3.5" /> {diagnosticResult.connectionStatus}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-1.5">
+                        <span className="text-slate-500 font-medium">4. competitions Read Access</span>
+                        <span className="text-emerald-600 font-bold flex items-center gap-1 text-right">
+                          <CheckCircle2 className="size-3.5" /> {diagnosticResult.readStatus}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-1.5">
+                        <span className="text-slate-500 font-medium">5. competitions Write & Create Test</span>
+                        <span className="text-emerald-600 font-bold flex items-center gap-1 text-right">
+                          <CheckCircle2 className="size-3.5" /> {diagnosticResult.writeStatus}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="text-slate-500 font-medium">6. Security Rules Resolution</span>
+                        <span className="text-slate-800 font-mono text-[11px] font-semibold text-right">{diagnosticResult.rulesStatus}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
         </div>

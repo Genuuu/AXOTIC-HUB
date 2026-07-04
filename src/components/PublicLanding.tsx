@@ -20,7 +20,7 @@ import {
 import { motion, AnimatePresence, useScroll, useTransform } from "motion/react";
 import defaultLogoUrl from "../../Images/Logo.png";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
-import { db } from "../firebase";
+import { db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { defaultPublicLandingData, PublicLandingData } from "./defaultPublicLandingData";
 
@@ -109,6 +109,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
       }
     }, (err) => {
       console.warn("Could not load public page configurations from Firestore securely.", err.message);
+      handleFirestoreError(err, OperationType.GET, "landing/public");
     });
 
     return () => {

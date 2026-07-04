@@ -8,7 +8,6 @@ import {
   Warehouse, 
   Users, 
   UserCircle, 
-  ShieldCheck, 
   Globe,
   Plus,
   Compass,
@@ -53,6 +52,8 @@ import CompetitionsHub from "./components/CompetitionsHub";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  const effectiveUser = currentUser;
   const { logoUrl: remoteLogoUrl } = useWorkspaceSettings(currentUser?.isOfflineMock);
   const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
   const [roster, setRoster] = useState<UserProfile[]>([]);
@@ -424,6 +425,7 @@ export default function App() {
       setRoster(users);
     }, (err) => {
       console.warn("Could not load roster list securely. Authenticated access constraints active.", err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.GET, "users");
     });
 
     return () => unsubRoster();
@@ -571,6 +573,7 @@ export default function App() {
       setProjectsList(items);
     }, (err) => {
       console.warn("Could not fetch global build listings real-time.", err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.GET, "projects");
     });
 
     return () => unsubProjects();
@@ -604,6 +607,7 @@ export default function App() {
       setNotifications(items);
     }, (err) => {
       console.warn("Failed to stream notifications", err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.GET, "notifications");
     });
     return () => unsub();
   }, [currentUser?.uid, currentUser?.isOfflineMock]);
@@ -915,14 +919,14 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Settings className="size-4" /> {currentUser?.role === "admin" ? "System Settings" : "Preferences & Theme"}
+                <Settings className="size-4" /> {effectiveUser?.role === "admin" ? "System Settings" : "Preferences & Theme"}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed text-left">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
                   <strong className="text-white block font-semibold mb-0.5 text-[11px]">
-                    {currentUser?.role === "admin" ? "Admin Hub Control" : "Personal Preferences"}
+                    {effectiveUser?.role === "admin" ? "Admin Hub Control" : "Personal Preferences"}
                   </strong>
-                  {currentUser?.role === "admin" 
+                  {effectiveUser?.role === "admin" 
                     ? "Configure global taxonomies, component categories, member access clearance levels, and security rules." 
                     : "Calibrate visual theme preferences and update personal profile parameters."
                   }
@@ -935,18 +939,18 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <img
                   referrerPolicy="no-referrer"
-                  src={currentUser.avatarUrl || undefined}
-                  alt={currentUser.displayName}
+                  src={effectiveUser.avatarUrl || undefined}
+                  alt={effectiveUser.displayName}
                   className="size-9 rounded-lg border border-slate-700 shadow-xs shrink-0"
                 />
                 <div className="text-left w-full min-w-0">
                   <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-xs font-bold text-white truncate block max-w-[100px]" title={currentUser.displayName}>
-                        {currentUser.displayName}
+                      <span className="text-xs font-bold text-white truncate block max-w-[100px]" title={effectiveUser.displayName}>
+                        {effectiveUser.displayName}
                       </span>
                     </div>
-                    {currentUser.role === "admin" ? (
+                    {effectiveUser.role === "admin" ? (
                       <span className="bg-blue-500/15 text-blue-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-500/30 font-mono tracking-wider shrink-0">
                         Admin
                       </span>
@@ -956,7 +960,7 @@ export default function App() {
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono block truncate">{currentUser.email}</span>
+                  <span className="text-[10px] text-slate-400 font-mono block truncate">{effectiveUser.email}</span>
                 </div>
               </div>
 
@@ -1000,15 +1004,15 @@ export default function App() {
                     {activeTab === "ideas" && "Concept Board & Brainstorming"}
                     {activeTab === "inventory" && "Stockroom & Component Registry"}
                     {activeTab === "roster" && "Active Specialists & Team Directory"}
-                    {activeTab === "settings" && (currentUser?.role === "admin" ? "Hub Command Center & Administration" : "Personal Preferences & App Settings")}
+                    {activeTab === "settings" && (effectiveUser?.role === "admin" ? "Hub Command Center & Administration" : "Personal Preferences & App Settings")}
                   </h1>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-sans mt-1">
+                  <p className="text-xs text-slate-550 dark:text-slate-400 font-sans mt-1">
                     {activeTab === "home" && "Overview telemetry on component supply levels, sponsor funding buffers, active competencies, and logs."}
                     {activeTab === "projects" && "Draft schematics, allocate hardware components, and publish real-time team logs."}
                     {activeTab === "ideas" && "Propose custom robot attachments, electronic controllers, software nodes, upvote concepts, and promote them to active projects."}
                     {activeTab === "inventory" && "Manage stockroom part catalog listings."}
                     {activeTab === "roster" && "Active specialists with customizable technical tags, contact credentials, and division roles."}
-                    {activeTab === "settings" && (currentUser?.role === "admin" 
+                    {activeTab === "settings" && (effectiveUser?.role === "admin" 
                       ? "Manage taxonomy categories, edit member access clearance, and configure workspace params." 
                       : "Customize visual theme preferences, adjust private layout options, and calibrate personal profile parameters."
                     )}
@@ -1134,17 +1138,17 @@ export default function App() {
                         title="View status telemetry"
                       >
                         <img
-                          src={currentUser.avatarUrl || undefined}
-                          alt={currentUser.displayName}
+                          src={effectiveUser.avatarUrl || undefined}
+                          alt={effectiveUser.displayName}
                           className="size-7 rounded-lg object-cover border border-slate-200 dark:border-slate-600 shadow-xs shrink-0"
                           referrerPolicy="no-referrer"
                         />
                         <div className="text-left hidden lg:block pr-1">
                           <p className="text-[10px] font-bold text-slate-800 dark:text-slate-200 leading-tight truncate max-w-[80px]">
-                            {currentUser.displayName}
+                            {effectiveUser.displayName}
                           </p>
                           <p className="text-[8px] text-slate-400 font-mono leading-none uppercase tracking-wider">
-                            {currentUser.role}
+                            {effectiveUser.role}
                           </p>
                         </div>
                         <ChevronDown className="size-3 text-slate-450 dark:text-slate-400 shrink-0 hidden sm:block" />
@@ -1175,20 +1179,20 @@ export default function App() {
                               {/* Avatar & Basic Info */}
                               <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
                                 <img
-                                  src={currentUser.avatarUrl || undefined}
-                                  alt={currentUser.displayName}
+                                  src={effectiveUser.avatarUrl || undefined}
+                                  alt={effectiveUser.displayName}
                                   className="size-10 rounded-xl object-cover border border-slate-200 dark:border-slate-705 shadow-xs"
                                   referrerPolicy="no-referrer"
                                 />
                                 <div className="min-w-0 flex-1">
                                   <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                                    {currentUser.displayName}
+                                    {effectiveUser.displayName}
                                   </p>
                                   <p className="text-[9px] text-slate-400 font-mono truncate">
-                                    {currentUser.email}
+                                    {effectiveUser.email}
                                   </p>
                                   <div className="mt-1 flex items-center">
-                                    {currentUser.role === "admin" ? (
+                                    {effectiveUser.role === "admin" ? (
                                       <span className="bg-blue-500/10 text-blue-500 dark:text-blue-400 text-[8px] font-bold px-1.5 py-0.5 rounded border border-blue-500/20 font-mono uppercase tracking-wider">
                                         Admin access
                                       </span>
@@ -1308,7 +1312,7 @@ export default function App() {
                       className="flex-1 flex flex-col"
                     >
                       <HomeDashboard 
-                        currentUser={currentUser} 
+                        currentUser={effectiveUser} 
                         roster={roster} 
                         projectsList={projectsList} 
                         onNavigate={(tab, projectId) => {
@@ -1331,7 +1335,7 @@ export default function App() {
                       className="flex-1 flex flex-col"
                     >
                       <ProjectHub 
-                        currentUser={currentUser} 
+                        currentUser={effectiveUser} 
                         roster={roster} 
                         initialSelectedProjectId={selectedProjectId}
                         onClearInitialSelectedProjectId={() => setSelectedProjectId(null)}
@@ -1348,7 +1352,7 @@ export default function App() {
                       className="flex-1 flex flex-col"
                     >
                       <IdeasBoard
-                        currentUser={currentUser}
+                        currentUser={effectiveUser}
                         roster={roster}
                         onPromoteToProject={async (idea) => {
                           const newId = await handlePromoteToProject(idea);
@@ -1368,7 +1372,7 @@ export default function App() {
                       transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                       className="flex-1 flex flex-col"
                     >
-                      <InventoryManager currentUser={currentUser} projects={projectsList} />
+                      <InventoryManager currentUser={effectiveUser} projects={projectsList} />
                     </motion.div>
                   )}
                   {activeTab === "roster" && (
@@ -1380,7 +1384,7 @@ export default function App() {
                       transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                       className="flex-1 flex flex-col"
                     >
-                      <MemberRoster currentUser={currentUser} roster={roster} />
+                      <MemberRoster currentUser={effectiveUser} roster={roster} />
                     </motion.div>
                   )}
                   {activeTab === "competitions" && currentUser && (
@@ -1392,7 +1396,7 @@ export default function App() {
                       transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                       className="flex-1 flex flex-col"
                     >
-                      <CompetitionsHub currentUser={currentUser} roster={roster} />
+                      <CompetitionsHub currentUser={effectiveUser} roster={roster} />
                     </motion.div>
                   )}
                   {activeTab === "settings" && currentUser && (
@@ -1405,7 +1409,7 @@ export default function App() {
                       className="flex-1 flex flex-col"
                     >
                       <AdminSettings 
-                        currentUser={currentUser} 
+                        currentUser={effectiveUser} 
                         isDark={isDark} 
                         onToggleTheme={() => setIsDark(!isDark)}
                         themeMode={themeMode}

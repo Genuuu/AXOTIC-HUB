@@ -181,6 +181,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           renderAggregated();
         }, (err) => {
           console.warn(`Firestore log stream skipped for project ${p.id}`, err instanceof Error ? err.message : String(err));
+          handleFirestoreError(err, OperationType.LIST, `projects/${p.id}/logs`);
         });
         unsubscribers.push(unsub);
       });
@@ -325,6 +326,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           updateState();
         }, (err) => {
           console.warn(`Firestore hardware stream skipped for project ${p.id}`, err instanceof Error ? err.message : String(err));
+          handleFirestoreError(err, OperationType.LIST, `projects/${p.id}/hardware`);
         });
         unsubscribers.push(unsub);
       });

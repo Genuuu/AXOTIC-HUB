@@ -125,6 +125,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
         }
       }, (err) => {
         console.warn("Could not stream categories dynamically", err instanceof Error ? err.message : String(err));
+        handleFirestoreError(err, OperationType.LIST, "categories");
       });
       return () => unsub();
     }
@@ -261,6 +262,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
       }
     }, (err) => {
       console.warn("Could not load hardware for salvage. Standard write guidelines apply.", err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.LIST, `projects/${salvageProjectId}/hardware`);
     });
 
     return () => unsubscribe();

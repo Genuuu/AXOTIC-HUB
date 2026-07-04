@@ -267,7 +267,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
         resetForm();
       } catch (err: any) {
         handleFirestoreError(err, OperationType.CREATE, "competitions");
-        setFormError("Firestore Permission Denied. Members only can add competitions.");
+        setFormError(`Failed to add competition: ${err?.message || err || "Firestore Permission Denied."}`);
         setSubmitting(false);
       }
     }
