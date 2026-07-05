@@ -6,7 +6,8 @@ import {
   Mail, 
   Copy, 
   Check, 
-  Instagram, 
+  Instagram,
+  Link, 
   Linkedin, 
   Youtube, 
   Sparkles, 
@@ -49,10 +50,197 @@ const staggerContainer = {
   }
 };
 
+
+const BuildCard = ({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
+  const images = spec.imageUrl ? spec.imageUrl.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [];
+  const displayImages = images.length > 0 ? images : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`];
+  
+  const [currentIdx, setCurrentIdx] = React.useState(0);
+
+  return (
+    <motion.div 
+      key={`${spec.id || 'build'}-${idx}`}
+      id={`build-card-${idx}`}
+      variants={slowFadeIn}
+      className="rounded-3xl overflow-hidden shadow-xs group border border-slate-200 bg-white hover:border-slate-300 hover:shadow-md flex flex-col transition-all"
+      whileHover={{ y: -4 }}
+    >
+      <div className="relative aspect-video sm:aspect-16/10 overflow-hidden bg-slate-100 border-b border-slate-100">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.img 
+            key={currentIdx}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            src={displayImages[currentIdx]} 
+            alt={spec.title} 
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 cursor-pointer"
+            referrerPolicy="no-referrer"
+            onClick={() => onOpenLightbox(idx, currentIdx)}
+          />
+        </AnimatePresence>
+        
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-0 md:opacity-100 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none" />
+        
+        <div className="absolute top-3 left-3 md:top-4 md:left-4 pointer-events-none">
+          <span className="text-[9px] font-bold font-mono tracking-wider bg-blue-600 text-white px-2 py-1 rounded uppercase shadow-sm">
+            {spec.category}
+          </span>
+        </div>
+
+        <div className="absolute bottom-3 right-3 md:bottom-4 md:right-4 bg-black/60 backdrop-blur-md text-[8px] font-bold tracking-widest text-white uppercase py-1.5 px-3 rounded-full font-mono md:opacity-0 md:group-hover:opacity-100 transition-opacity pointer-events-none">
+          VIEW SPECS
+        </div>
+
+        {displayImages.length > 1 && (
+          <>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIdx(prev => prev === 0 ? displayImages.length - 1 : prev - 1);
+              }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-0 group-hover:opacity-100 z-10"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIdx(prev => (prev + 1) % displayImages.length);
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-0 group-hover:opacity-100 z-10"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              {displayImages.map((_, i) => (
+                <div key={i} className={`h-1 rounded-full transition-all ${i === currentIdx ? 'w-4 bg-blue-500' : 'w-1.5 bg-white/70'}`} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="p-5 md:p-6 flex-1 flex flex-col justify-between cursor-pointer" onClick={() => onOpenLightbox(idx, currentIdx)}>
+        <div>
+          <h3 className="text-base md:text-lg font-black text-slate-800 leading-snug tracking-tight mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
+            {spec.title}
+          </h3>
+          <p className="text-xs md:text-sm text-slate-500 leading-relaxed line-clamp-3">
+            {spec.subtitle}
+          </p>
+        </div>
+        {spec.technologies && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+             <span className="text-[9px] font-mono tracking-widest text-slate-400 block uppercase font-bold mb-1.5">
+               TECHNOLOGIES
+             </span>
+             <p className="text-[10px] md:text-xs text-slate-600 font-mono font-medium line-clamp-2">
+               {spec.technologies}
+             </p>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+
+const BuildLightbox = React.forwardRef(({ spec, initialIdx, idx, onClose }: any, ref: any) => {
+  const images = spec.imageUrl ? spec.imageUrl.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [];
+  const displayImages = images.length > 0 ? images : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1600`];
+  
+  const [currentIdx, setCurrentIdx] = React.useState(initialIdx || 0);
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <motion.div
+        className="relative max-w-6xl w-full flex flex-col items-center justify-center group"
+        onClick={(e: any) => e.stopPropagation()}
+      >
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.img
+            key={currentIdx}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            src={displayImages[currentIdx]}
+            alt={spec.title}
+            className="w-auto h-auto max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+            referrerPolicy="no-referrer"
+          />
+        </AnimatePresence>
+        
+        {displayImages.length > 1 && (
+          <>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIdx((prev: number) => prev === 0 ? displayImages.length - 1 : prev - 1);
+              }}
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 z-10"
+            >
+              <ChevronLeft className="size-5 sm:size-6" />
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIdx((prev: number) => (prev + 1) % displayImages.length);
+              }}
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 z-10"
+            >
+              <ChevronRight className="size-5 sm:size-6" />
+            </button>
+            <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
+              {displayImages.map((_: any, i: number) => (
+                <div key={i} className={`h-1.5 rounded-full transition-all ${i === currentIdx ? 'w-6 bg-blue-500' : 'w-2 bg-white/70'}`} />
+              ))}
+            </div>
+          </>
+        )}
+
+        <button 
+          className="absolute top-2 right-2 sm:-top-12 sm:right-0 text-white hover:text-red-400 p-2 border border-white/10 bg-black/50 rounded-full backdrop-blur-sm transition-colors z-50" 
+          onClick={onClose}
+        >
+          <X className="size-5" />
+        </button>
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 text-left border border-white/10 sm:max-w-xl shadow-2xl overflow-y-auto max-h-[40vh]"
+        >
+          <p className="text-white text-xl font-extrabold tracking-tight">
+            {spec.title}
+          </p>
+          <p className="text-white/80 text-sm mt-2 leading-relaxed">
+            {spec.subtitle}
+          </p>
+          {spec.technologies && (
+            <p className="text-xs text-blue-300 tracking-wider font-mono uppercase mt-4 block">
+              {spec.technologies}
+            </p>
+          )}
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  );
+});
+
 export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
   const [copied, setCopied] = useState(false);
   const [activeBuild, setActiveBuild] = useState<string | null>(null);
-  const [lightboxImageIndex, setLightboxImageIndex] = useState<number | null>(null);
+  const [lightboxImageIndex, setLightboxImageIndex] = useState<{idx: number, imgIdx: number} | null>(null);
   const [landingData, setLandingData] = useState<PublicLandingData>(defaultPublicLandingData);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
@@ -144,8 +332,8 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         style={{ y: backgroundY }}
         className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-35 pointer-events-none -z-10" 
       />
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-100/40 rounded-full blur-3xl pointer-events-none -z-20" />
-      <div className="absolute bottom-10 left-10 w-80 h-80 bg-slate-200/50 rounded-full blur-3xl pointer-events-none -z-20" />
+      
+      
 
       {/* Main Header / Secure Portal Bar */}
       <motion.header 
@@ -263,9 +451,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             variants={slowFadeIn}
             className="bg-white border border-slate-200/80 rounded-3xl p-8 sm:p-12 shadow-sm relative overflow-hidden"
           >
-          <div className="absolute top-0 right-0 w-48 h-48 bg-slate-50 rounded-full blur-2xl pointer-events-none" />
-          
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start relative z-10">
             <div className="md:col-span-4 space-y-3">
               <span className="text-[10px] font-bold tracking-widest text-slate-400 font-mono uppercase block">SECTION 02</span>
               <h2 className="text-2xl sm:text-3xl font-black text-[#0f2e46] tracking-tight uppercase">
@@ -274,32 +460,53 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
               <div className="w-12 h-1 bg-blue-600 rounded" />
             </div>
 
-            <div className="md:col-span-8 space-y-6">
-              <p className="text-sm sm:text-base text-slate-650 leading-relaxed font-normal">
+            <div className="md:col-span-8 space-y-8">
+              <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
                 {landingData.whoWeAreOriginDesc}
               </p>
 
               {/* Multidisciplinary Spec Badges */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center text-center">
-                  <div className="size-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2.5">
-                    <Cpu className="size-4" />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div className="group relative bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col items-start text-left overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/20">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <Cpu className="size-24 text-blue-400" />
                   </div>
-                  <span className="text-xs font-bold text-slate-700 block">Electrical</span>
+                  <div className="size-10 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center mb-6 border border-blue-500/30">
+                    <Cpu className="size-5" />
+                  </div>
+                  <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase font-bold mb-2">CORE 01</span>
+                  <span className="text-xl font-bold text-white tracking-tight">Electrical<br/>Systems</span>
+                  <div className="w-full h-1 bg-slate-800 mt-6 rounded-full overflow-hidden">
+                    <div className="w-full h-full bg-blue-500 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 ease-out" />
+                  </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center text-center">
-                  <div className="size-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2.5">
-                    <Layers className="size-4" />
+                <div className="group relative bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col items-start text-left overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-900/20">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <Layers className="size-24 text-emerald-400" />
                   </div>
-                  <span className="text-xs font-bold text-slate-700 block">Mechanical</span>
+                  <div className="size-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-6 border border-emerald-500/30">
+                    <Layers className="size-5" />
+                  </div>
+                  <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase font-bold mb-2">CORE 02</span>
+                  <span className="text-xl font-bold text-white tracking-tight">Mechanical<br/>& CAD</span>
+                  <div className="w-full h-1 bg-slate-800 mt-6 rounded-full overflow-hidden">
+                    <div className="w-full h-full bg-emerald-500 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 ease-out" />
+                  </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center text-center">
-                  <div className="size-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2.5">
-                    <Activity className="size-4" />
+                <div className="group relative bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col items-start text-left overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-900/20">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <Activity className="size-24 text-indigo-400" />
                   </div>
-                  <span className="text-xs font-bold text-slate-700 block">Biomedical</span>
+                  <div className="size-10 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-6 border border-indigo-500/30">
+                    <Activity className="size-5" />
+                  </div>
+                  <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase font-bold mb-2">CORE 03</span>
+                  <span className="text-xl font-bold text-white tracking-tight">Biomedical<br/>R&D</span>
+                  <div className="w-full h-1 bg-slate-800 mt-6 rounded-full overflow-hidden">
+                    <div className="w-full h-full bg-indigo-500 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 ease-out" />
+                  </div>
                 </div>
               </div>
 
@@ -357,57 +564,13 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             
             {landingData.buildSpecs && landingData.buildSpecs.length > 0 ? (
               landingData.buildSpecs.map((spec, idx) => (
-                <motion.div 
-                  key={`${spec.id || 'build'}-${idx}`}
-                  id={`build-card-${idx}`}
-                  variants={slowFadeIn}
-                  className="rounded-3xl overflow-hidden shadow-xs cursor-pointer group border border-slate-200 bg-white hover:border-slate-300 hover:shadow-md flex flex-col transition-all"
-                  onClick={() => setLightboxImageIndex(idx)}
-                  whileHover={{ y: -4 }}
-                >
-                  <div className="relative aspect-video sm:aspect-16/10 overflow-hidden bg-slate-100 border-b border-slate-100">
-                    <motion.img 
-                      layoutId={`lightbox-img-${idx}`}
-                      src={spec.imageUrl || `https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`} 
-                      alt={spec.title} 
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
-                    />
-                    
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-0 md:opacity-100 group-hover:opacity-0 transition-opacity duration-300" />
-                    
-                    <div className="absolute top-3 left-3 md:top-4 md:left-4">
-                      <span className="text-[9px] font-bold font-mono tracking-wider bg-blue-600 text-white px-2 py-1 rounded uppercase shadow-sm">
-                        {spec.category}
-                      </span>
-                    </div>
-
-                    <div className="absolute bottom-3 right-3 md:bottom-4 md:right-4 bg-black/60 backdrop-blur-md text-[8px] font-bold tracking-widest text-white uppercase py-1.5 px-3 rounded-full font-mono md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      VIEW SPECS
-                    </div>
-                  </div>
-
-                  <div className="p-5 md:p-6 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3 className="text-base md:text-lg font-black text-slate-800 leading-snug tracking-tight mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
-                        {spec.title}
-                      </h3>
-                      <p className="text-xs md:text-sm text-slate-500 leading-relaxed line-clamp-3">
-                        {spec.subtitle}
-                      </p>
-                    </div>
-                    {spec.technologies && (
-                      <div className="mt-4 pt-4 border-t border-slate-100">
-                         <span className="text-[9px] font-mono tracking-widest text-slate-400 block uppercase font-bold mb-1.5">
-                           TECHNOLOGIES
-                         </span>
-                         <p className="text-[10px] md:text-xs text-slate-600 font-mono font-medium line-clamp-2">
-                           {spec.technologies}
-                         </p>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
+                <BuildCard 
+                  key={`${spec.id || 'build'}-${idx}`} 
+                  spec={spec} 
+                  idx={idx} 
+                  slowFadeIn={slowFadeIn} 
+                  onOpenLightbox={(i: number, imgI: number) => setLightboxImageIndex({idx: i, imgIdx: imgI})} 
+                />
               ))
             ) : (
                <div className="col-span-1 md:col-span-2 text-center text-slate-500 py-12 border border-dashed border-slate-200 rounded-3xl">
@@ -538,8 +701,8 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
           className="bg-[#0f2e46] text-white rounded-3xl p-8 sm:p-12 shadow-md relative overflow-hidden"
         >
           {/* Subtle neon accents */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-10 left-10 w-60 h-60 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          
+          
 
           <div className="flex flex-col lg:flex-row items-stretch justify-between gap-8 z-10 relative">
             <div className="space-y-5 lg:max-w-[60%] flex flex-col justify-between">
@@ -615,44 +778,44 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
 
               {/* Grid of Social Channels */}
               <div className="space-y-2">
-                <motion.a 
-                  href="https://instagram.com" 
-                  target="_blank"
-                  rel="noreferrer"
-                  whileHover={{ scale: 1.02, x: 2, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-                  className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02] text-xs font-semibold text-slate-300 hover:text-white transition-all"
-                >
-                  <span className="flex items-center gap-2">
-                    <Instagram className="size-4 text-pink-400" /> Instagram
-                  </span>
-                  <ExternalLink className="size-3 opacity-60" />
-                </motion.a>
-
-                <motion.a 
-                  href="https://linkedin.com" 
-                  target="_blank"
-                  rel="noreferrer"
-                  whileHover={{ scale: 1.02, x: 2, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-                  className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02] text-xs font-semibold text-slate-300 hover:text-white transition-all"
-                >
-                  <span className="flex items-center gap-2">
-                    <Linkedin className="size-4 text-blue-400" /> LinkedIn
-                  </span>
-                  <ExternalLink className="size-3 opacity-60" />
-                </motion.a>
-
-                <motion.a 
-                  href="https://youtube.com" 
-                  target="_blank"
-                  rel="noreferrer"
-                  whileHover={{ scale: 1.02, x: 2, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-                  className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02] text-xs font-semibold text-slate-300 hover:text-white transition-all"
-                >
-                  <span className="flex items-center gap-2">
-                    <Youtube className="size-4 text-red-500" /> YouTube
-                  </span>
-                  <ExternalLink className="size-3 opacity-60" />
-                </motion.a>
+                {landingData.socialChannels && landingData.socialChannels.length > 0 ? (
+                  landingData.socialChannels.map((channel, idx) => {
+                    const platformLower = channel.platform.toLowerCase();
+                    let Icon = Link;
+                    let iconColorClass = "text-slate-400";
+                    
+                    if (platformLower.includes('instagram')) {
+                      Icon = Instagram;
+                      iconColorClass = "text-pink-400";
+                    } else if (platformLower.includes('linkedin')) {
+                      Icon = Linkedin;
+                      iconColorClass = "text-blue-400";
+                    } else if (platformLower.includes('youtube')) {
+                      Icon = Youtube;
+                      iconColorClass = "text-red-500";
+                    }
+                    
+                    return (
+                      <motion.a 
+                        key={`social-${channel.id}-${idx}`}
+                        href={channel.url} 
+                        target="_blank"
+                        rel="noreferrer"
+                        whileHover={{ scale: 1.02, x: 2, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
+                        className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02] text-xs font-semibold text-slate-300 hover:text-white transition-all"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Icon className={`size-4 ${iconColorClass}`} /> {channel.platform}
+                        </span>
+                        <ExternalLink className="size-3 opacity-60" />
+                      </motion.a>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-6 border border-white/5 rounded-xl">
+                    <p className="text-[10px] text-slate-500 font-mono">No social channels active</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -667,64 +830,24 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
-        className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-20 pt-8 border-t border-slate-200/40 pb-6 text-center sm:text-left"
+        className="w-full max-w-5xl flex flex-col sm:flex-row justify-center items-center text-[10px] text-[#0f2e46]/50 tracking-wider font-mono uppercase gap-4 mt-20 pt-8 border-t border-slate-200/40 pb-6 text-center"
       >
         <div className="flex flex-col space-y-1">
           <span>AXOTIC HUB V1.0</span>
           <span>&copy; 2026 all rights reserved</span>
-        </div>
-        <div className="text-[9px] text-slate-400 font-normal">
-          Designed with Swiss typographic principles
         </div>
       </motion.footer>
 
       {/* Lightbox Overlay */}
       <AnimatePresence>
         {lightboxImageIndex !== null && landingData.buildSpecs && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
-            onClick={() => setLightboxImageIndex(null)}
-          >
-            <motion.div
-              className="relative max-w-6xl w-full flex flex-col items-center justify-center"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <motion.img
-                layoutId={`lightbox-img-${lightboxImageIndex}`}
-                src={landingData.buildSpecs[lightboxImageIndex].imageUrl || `https://images.unsplash.com/photo-${lightboxImageIndex % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1600`}
-                alt={landingData.buildSpecs[lightboxImageIndex].title}
-                className="w-auto h-auto max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
-                referrerPolicy="no-referrer"
-              />
-              <button 
-                className="absolute top-2 right-2 sm:-top-12 sm:right-0 text-white hover:text-red-400 p-2 border border-white/10 bg-black/50 rounded-full backdrop-blur-sm transition-colors z-50" 
-                onClick={() => setLightboxImageIndex(null)}
-              >
-                <X className="size-5" />
-              </button>
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 bg-slate-900/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 text-left border border-white/10 sm:max-w-xl shadow-2xl overflow-y-auto max-h-[40vh]"
-              >
-                <p className="text-white text-xl font-extrabold tracking-tight">
-                  {landingData.buildSpecs[lightboxImageIndex].title}
-                </p>
-                <p className="text-white/80 text-sm mt-2 leading-relaxed">
-                  {landingData.buildSpecs[lightboxImageIndex].subtitle}
-                </p>
-                {landingData.buildSpecs[lightboxImageIndex].technologies && (
-                  <p className="text-xs text-blue-300 tracking-wider font-mono uppercase mt-4 block">
-                    {landingData.buildSpecs[lightboxImageIndex].technologies}
-                  </p>
-                )}
-              </motion.div>
-            </motion.div>
-          </motion.div>
+          <BuildLightbox 
+            key="lightbox"
+            spec={landingData.buildSpecs[lightboxImageIndex.idx]} 
+            idx={lightboxImageIndex.idx} 
+            initialIdx={lightboxImageIndex.imgIdx} 
+            onClose={() => setLightboxImageIndex(null)} 
+          />
         )}
       </AnimatePresence>
     </div>

@@ -28,6 +28,13 @@ export interface GalleryPhoto {
   caption?: string;
 }
 
+
+export interface SocialChannel {
+  id: string;
+  platform: string;
+  url: string;
+}
+
 export interface PublicLandingData {
   heroTitle: string;
   heroSubtitle: string;
@@ -45,6 +52,7 @@ export interface PublicLandingData {
   sponsorBenefitTitle: string;
   sponsorBenefitDesc: string;
   contactEmail: string;
+  socialChannels?: SocialChannel[];
   galleryPhotos?: GalleryPhoto[];
   showIntro?: boolean;
   showAboutUs?: boolean;
@@ -84,6 +92,10 @@ export const defaultPublicLandingData: PublicLandingData = {
   sponsorBenefitTitle: "The Benefit",
   sponsorBenefitDesc: "Your company, emblem, or corporate brand will get high-visibility placement across our engineered robot chassis covers, official combat apparel shirts, press media, and custom banners inside this very engineering management applet.",
   contactEmail: "axotic.kdu@gmail.com",
+  socialChannels: [
+    { id: "sc-1", platform: "Instagram", url: "https://instagram.com" },
+    { id: "sc-2", platform: "LinkedIn", url: "https://linkedin.com" }
+  ],
   galleryPhotos: [],
   showIntro: true,
   showAboutUs: true,

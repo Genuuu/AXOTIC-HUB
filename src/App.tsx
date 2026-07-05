@@ -30,7 +30,7 @@ import {
   Bell,
   Megaphone,
   ChevronDown,
-  ChevronRight,
+  ChevronRight, PanelLeftClose, PanelLeftOpen,
   Sliders,
   Trophy
 } from "lucide-react";
@@ -61,6 +61,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [showUserPopover, setShowUserPopover] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Theme state: "light" | "dark" | "system"
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(() => {
@@ -699,7 +700,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100">
+    <div className={`${currentUser ? "h-screen overflow-hidden" : "min-h-screen"} bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100`}>
       
       {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out) */}
       {!currentUser ? (
@@ -717,10 +718,22 @@ export default function App() {
       ) : (
         
         /* 2. SECURE MEMBER HUB WORKSPACE (User Is Logged In) */
-        <div id="secure-hub-context-shell" className="flex-1 flex flex-col md:flex-row min-h-screen w-full">
+        <div id="secure-hub-context-shell" className="flex-1 flex flex-col md:flex-row h-full w-full">
           
           {/* Side navigation for desktop / top header for mobile */}
-          <aside id="secured-hub-sidebar" className="sticky top-0 z-40 w-full md:w-64 bg-slate-900/85 backdrop-blur-md border-b border-slate-800 md:relative md:bg-slate-900 md:backdrop-blur-none md:border-b-0 md:border-r flex flex-col justify-between shrink-0 transition-all duration-300">
+          <aside id="secured-hub-sidebar" className={`sticky top-0 z-40 w-full ${isSidebarCollapsed ? "md:w-20" : "md:w-64"} bg-slate-900/85 backdrop-blur-md border-b border-slate-800 md:relative md:bg-slate-900 md:backdrop-blur-none md:border-b-0 md:border-r md:border-slate-800/80 md:shadow-[4px_0_24px_rgba(0,0,0,0.1)] flex flex-col justify-between shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] h-full`}>
+            {/* Collapse Toggle Button */}
+            <button 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="absolute -right-4 top-1/2 -translate-y-1/2 w-4 h-12 rounded-r-md bg-slate-800 border border-l-0 border-slate-700 text-slate-400 hover:text-white flex items-center justify-center z-50 hidden md:flex hover:w-5 transition-all shadow-md group cursor-pointer"
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen className="size-3 transition-transform duration-300 group-hover:scale-110" />
+              ) : (
+                <PanelLeftClose className="size-3 transition-transform duration-300 group-hover:scale-110" />
+              )}
+            </button>
             
             {/* Top Logo & App Context */}
             <div className="py-7 px-6 md:p-6 border-b border-slate-800 flex items-center justify-between md:block">
@@ -742,20 +755,20 @@ export default function App() {
                   </div>
                 </div>
                 <div>
-                  <h1 className="font-display font-bold text-sm tracking-tight text-white flex items-center gap-1.5 uppercase">
+                  {!isSidebarCollapsed && <h1 className="font-display font-bold text-sm tracking-tight text-white flex items-center gap-1.5 uppercase animate-fade-in">
                     AXOTIC <span className="text-blue-400">HUB</span>
-                  </h1>
-                  {currentUser?.isOfflineMock ? (
-                    <div className="flex items-center gap-1 text-[9px] font-mono text-amber-400">
+                  </h1>}
+                  {!isSidebarCollapsed && (currentUser?.isOfflineMock ? (
+                    <div className="flex items-center gap-1 text-[9px] font-mono text-amber-400 animate-fade-in">
                       <span>SANDBOX CONNECT</span>
-                      <span className="size-1.5 bg-amber-500 rounded-full animate-pulse" />
+                      <span className="size-1.5 bg-amber-500 rounded-full animate-pulse shrink-0" />
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400">
+                    <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400 animate-fade-in">
                       <span>LIVE CONNECTIVITY</span>
-                      <span className="size-1.5 bg-emerald-500 rounded-full animate-ping" />
+                      <span className="size-1.5 bg-emerald-500 rounded-full animate-ping shrink-0" />
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
               
@@ -802,10 +815,10 @@ export default function App() {
             </div>
 
             {/* Desktop Navigation Links */}
-            <nav id="viewport-nav" className="hidden md:flex flex-1 p-4 space-y-1.5 flex-col justify-start text-left">
-              <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-2.5 mb-2 hidden md:block">
+            <nav id="viewport-nav" className="hidden md:flex flex-1 p-4 space-y-1.5 flex-col justify-start text-left overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              {!isSidebarCollapsed && <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-2.5 mb-2 hidden md:block animate-fade-in">
                 Member Workspace
-              </div>
+              </div>}
               
               <button
                 id="tab-nav-home"
@@ -816,7 +829,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <LayoutGrid className="size-4" /> Home Dashboard
+                <LayoutGrid className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Home Dashboard</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -834,7 +847,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Cpu className="size-4" /> Project Workspace
+                <Cpu className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Project Workspace</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -852,7 +865,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Zap className="size-4" /> Ideas Board
+                <Zap className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Ideas Board</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -870,7 +883,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Boxes className="size-4" /> Stockroom Inventory
+                <Boxes className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Stockroom Inventory</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -888,7 +901,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Users className="size-4" /> Members
+                <Users className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Members</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -906,7 +919,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Trophy className="size-4" /> Competitions
+                <Trophy className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Competitions</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -924,7 +937,7 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Settings className="size-4" /> {effectiveUser?.role === "admin" ? "System Settings" : "Preferences & Theme"}
+                <Settings className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">{effectiveUser?.role === "admin" ? "System Settings" : "Preferences & Theme"}</span>}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed text-left">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -941,32 +954,34 @@ export default function App() {
 
             {/* Bottom active profile widget */}
             <div className="p-4 border-t border-slate-800 hidden md:flex flex-col space-y-3.5">
-              <div className="flex items-center gap-3">
+              <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3"}`}>
                 <img
                   referrerPolicy="no-referrer"
                   src={effectiveUser.avatarUrl || undefined}
                   alt={effectiveUser.displayName}
                   className="size-9 rounded-lg border border-slate-700 shadow-xs shrink-0"
                 />
-                <div className="text-left w-full min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-xs font-bold text-white truncate block max-w-[100px]" title={effectiveUser.displayName}>
-                        {effectiveUser.displayName}
-                      </span>
+                {!isSidebarCollapsed && (
+                  <div className="text-left w-full min-w-0 animate-fade-in">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="text-xs font-bold text-white truncate block max-w-[100px]" title={effectiveUser.displayName}>
+                          {effectiveUser.displayName}
+                        </span>
+                      </div>
+                      {effectiveUser.role === "admin" ? (
+                        <span className="bg-blue-500/15 text-blue-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-500/30 font-mono tracking-wider shrink-0">
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="bg-slate-800 text-slate-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-slate-700 font-mono tracking-wider shrink-0">
+                          Member
+                        </span>
+                      )}
                     </div>
-                    {effectiveUser.role === "admin" ? (
-                      <span className="bg-blue-500/15 text-blue-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-500/30 font-mono tracking-wider shrink-0">
-                        Admin
-                      </span>
-                    ) : (
-                      <span className="bg-slate-800 text-slate-400 text-[8px] font-bold px-1.5 py-0.2 rounded border border-slate-700 font-mono tracking-wider shrink-0">
-                        Member
-                      </span>
-                    )}
+                    <span className="text-[10px] text-slate-400 font-mono block truncate">{effectiveUser.email}</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono block truncate">{effectiveUser.email}</span>
-                </div>
+                )}
               </div>
 
               {/* Sign Out Option */}
@@ -976,7 +991,7 @@ export default function App() {
                   onClick={handleOpenEditProfile}
                   className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-2 border border-slate-700"
                 >
-                  <Settings className="size-3.5" /> Edit Profile
+                  <Settings className="size-3.5 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Edit Profile</span>}
                 </button>
 
                 <button
@@ -984,12 +999,12 @@ export default function App() {
                   onClick={handleLogout}
                   className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 text-[11px] font-bold rounded-lg uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <LogOut className="size-3.5" /> Log Out Workspace
+                  <LogOut className="size-3.5 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Log Out Workspace</span>}
                 </button>
               </div>
 
               {/* Version & Copyright Footer */}
-              <div className="pt-4 pb-2 text-center flex flex-col space-y-1">
+              <div className={`pt-4 pb-2 text-center flex flex-col space-y-1 ${isSidebarCollapsed ? "hidden" : "flex"}`}>
                 <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">AXOTIC HUB V1.0</span>
                 <span className="text-[8px] text-slate-600 font-sans tracking-wide">&copy; All rights reserved TEAM AXOTIC</span>
               </div>
@@ -997,7 +1012,7 @@ export default function App() {
           </aside>
 
           {/* Main workspace frame on right */}
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
             
             {/* Header Title Banner with workspace context description */}
             <header className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800/60 px-6 py-5 hidden md:block text-left transition-colors duration-500 ease-in-out">
