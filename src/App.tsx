@@ -700,7 +700,7 @@ export default function App() {
   }
 
   return (
-    <div className={`${currentUser ? "h-screen overflow-hidden" : "min-h-screen"} bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100`}>
+    <div className={`${currentUser ? "h-[100dvh] overflow-hidden" : "min-h-screen"} bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100`}>
       
       {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out) */}
       {!currentUser ? (
@@ -721,7 +721,7 @@ export default function App() {
         <div id="secure-hub-context-shell" className="flex-1 flex flex-col md:flex-row h-full w-full">
           
           {/* Side navigation for desktop / top header for mobile */}
-          <aside id="secured-hub-sidebar" className={`sticky top-0 z-40 w-full ${isSidebarCollapsed ? "md:w-20" : "md:w-64"} bg-slate-900/85 backdrop-blur-md border-b border-slate-800 md:relative md:bg-slate-900 md:backdrop-blur-none md:border-b-0 md:border-r md:border-slate-800/80 md:shadow-[4px_0_24px_rgba(0,0,0,0.1)] flex flex-col justify-between shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] h-full`}>
+          <aside id="secured-hub-sidebar" className={`sticky top-0 z-40 w-full ${isSidebarCollapsed ? "md:w-20" : "md:w-64"} bg-slate-900/85 backdrop-blur-md border-b border-slate-800 md:relative md:bg-slate-900 md:backdrop-blur-none md:border-b-0 md:border-r md:border-slate-800/80 md:shadow-[4px_0_24px_rgba(0,0,0,0.1)] flex flex-col justify-between shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:h-full overflow-x-hidden`}>
             {/* Collapse Toggle Button */}
             <button 
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
