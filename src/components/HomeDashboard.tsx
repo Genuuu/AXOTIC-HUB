@@ -92,6 +92,13 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function HomeDashboard({ currentUser, roster, projectsList, onNavigate, onOpenEditProfile }: HomeDashboardProps) {
+  const onlineMembers = roster.filter(m => {
+    const isMe = m.uid === currentUser.uid;
+    if (isMe) return true;
+    if (m.isOnline !== true) return false;
+    if (!m.lastActiveAt) return false;
+    return Date.now() - new Date(m.lastActiveAt).getTime() < 5 * 60 * 1000;
+  });
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [allLogs, setAllLogs] = useState<ProjectLog[]>([]);
   const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
@@ -526,7 +533,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
               className="flex -space-x-1.5 cursor-pointer hover:opacity-80 transition-opacity mr-2" 
               title="Active Specialists Directory"
             >
-              {roster.filter(m => m.isOnline).slice(0, 5).map(m => (
+              {onlineMembers.slice(0, 5).map(m => (
                 <div key={m.uid} className="relative group cursor-help">
                   <img 
                     src={m.avatarUrl || undefined} 
@@ -539,9 +546,9 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
                   />
                 </div>
               ))}
-              {roster.filter(m => m.isOnline).length > 5 && (
+              {onlineMembers.length > 5 && (
                 <div className="size-7 rounded-full border-2 border-slate-800 bg-slate-700 flex items-center justify-center text-[9px] font-bold text-white relative z-10">
-                  +{roster.filter(m => m.isOnline).length - 5}
+                  +{onlineMembers.length - 5}
                 </div>
               )}
             </div>

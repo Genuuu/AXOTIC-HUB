@@ -1421,6 +1421,15 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
         </div>
       )}
 
+
+      {/* Floating Action Button (FAB) */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-6 right-6 md:bottom-8 md:right-8 size-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95 z-40 cursor-pointer"
+        title="Register New Part"
+      >
+        <Plus className="size-6" />
+      </button>
     </div>
   );
 }
