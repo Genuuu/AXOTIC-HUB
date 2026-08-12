@@ -49,6 +49,7 @@ import MemberRoster from "./components/MemberRoster";
 import AdminSettings from "./components/AdminSettings";
 import IdeasBoard from "./components/IdeasBoard";
 import CompetitionsHub from "./components/CompetitionsHub";
+import GeminiChatAssistant from "./components/GeminiChatAssistant";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -138,6 +139,7 @@ export default function App() {
 
   // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions"
   const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions">("home");
+  const [competitions, setCompetitions] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   
   // UI Control states
@@ -437,6 +439,41 @@ export default function App() {
     return () => unsubRoster();
   }, [currentUser?.uid]);
 
+
+  // Stream Competitions Data for indicator
+  useEffect(() => {
+    if (!currentUser) {
+      setCompetitions([]);
+      return;
+    }
+
+    if (currentUser.isOfflineMock) {
+      const fetchLocalComps = () => {
+        const local = localStorage.getItem("axotic_mock_competitions");
+        if (local) {
+          try {
+            setCompetitions(JSON.parse(local));
+          } catch (_) {}
+        }
+      };
+      fetchLocalComps();
+      window.addEventListener("axotic_db_update", fetchLocalComps);
+      return () => window.removeEventListener("axotic_db_update", fetchLocalComps);
+    } else {
+      const compsQuery = query(collection(db, "competitions"), orderBy("date", "asc"));
+      const unsubComps = onSnapshot(compsQuery, (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((snapDoc) => {
+          list.push({ id: snapDoc.id, ...snapDoc.data() });
+        });
+        setCompetitions(list);
+      }, (err) => {
+        console.warn("Could not load competitions.", err);
+      });
+      return () => unsubComps();
+    }
+  }, [currentUser?.uid, currentUser?.isOfflineMock]);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -699,6 +736,20 @@ export default function App() {
     );
   }
 
+
+  const upcomingCompetitionsCount = competitions.filter(c => {
+    if (c.status === "cancelled" || c.status === "postponed") return false;
+    if (!c.date || c.date === "TBD" || c.date === "To Be Decided") return false;
+    const compDate = new Date(c.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return (
+      compDate.getFullYear() === today.getFullYear() &&
+      compDate.getMonth() === today.getMonth() &&
+      compDate.getTime() >= today.getTime()
+    );
+  }).length;
+
   return (
     <div className={`${currentUser ? "h-[100dvh] overflow-hidden" : "min-h-screen"} bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100`}>
       
@@ -738,11 +789,11 @@ export default function App() {
             {/* Top Logo & App Context */}
             <div className="py-7 px-6 md:p-6 border-b border-slate-800 flex items-center justify-between md:block">
               <div className="flex items-center space-x-3">
-                <div className="size-8.5 rounded-lg overflow-hidden flex items-center justify-center bg-slate-800 relative">
+                <div className={`\${isSidebarCollapsed ? "h-10 w-10 justify-center" : "h-14 md:h-16 w-auto justify-start max-w-[240px]"} rounded-lg overflow-hidden flex items-center relative shrink-0 transition-all`}>
                   <img 
                     src={activeLogoUrl || undefined} 
                     alt="AXOTIC Logo" 
-                    className="size-full object-contain" 
+                    className="h-full w-auto object-contain" 
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
@@ -755,9 +806,9 @@ export default function App() {
                   </div>
                 </div>
                 <div>
-                  {!isSidebarCollapsed && <h1 className="font-display font-bold text-sm tracking-tight text-white flex items-center gap-1.5 uppercase animate-fade-in">
+                  {/*!isSidebarCollapsed && <h1 className="font-display font-bold text-sm tracking-tight text-white flex items-center gap-1.5 uppercase animate-fade-in">
                     AXOTIC <span className="text-blue-400">HUB</span>
-                  </h1>}
+                  </h1>*/}
                   {!isSidebarCollapsed && (currentUser?.isOfflineMock ? (
                     <div className="flex items-center gap-1 text-[9px] font-mono text-amber-400 animate-fade-in">
                       <span>SANDBOX CONNECT</span>
@@ -919,7 +970,12 @@ export default function App() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Trophy className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate">Competitions</span>}
+                <Trophy className="size-4 shrink-0" /> {!isSidebarCollapsed && <span className="truncate flex-1 text-left">Competitions</span>}
+                {!isSidebarCollapsed && upcomingCompetitionsCount > 0 && (
+                  <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto">
+                    {upcomingCompetitionsCount}
+                  </span>
+                )}
 
                 <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed">
                   <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
@@ -1508,7 +1564,14 @@ export default function App() {
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >
-                  <Trophy className={`size-5 mb-1 ${activeTab === "competitions" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "competitions" ? 2.5 : 2} />
+                  <div className="relative">
+                    <Trophy className={`size-5 mb-1 ${activeTab === "competitions" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "competitions" ? 2.5 : 2} />
+                    {upcomingCompetitionsCount > 0 && (
+                      <span className="absolute -top-1 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white shadow-xs">
+                        {upcomingCompetitionsCount}
+                      </span>
+                    )}
+                  </div>
                   <span>Arena</span>
                 </button>
                 <button
@@ -1721,6 +1784,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Persistent Chat Assistant for Logged In Users */}
+      {currentUser && <GeminiChatAssistant />}
     </div>
   );
 }

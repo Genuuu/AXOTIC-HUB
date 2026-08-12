@@ -92,13 +92,6 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function HomeDashboard({ currentUser, roster, projectsList, onNavigate, onOpenEditProfile }: HomeDashboardProps) {
-  const onlineMembers = roster.filter(m => {
-    const isMe = m.uid === currentUser.uid;
-    if (isMe) return true;
-    if (m.isOnline !== true) return false;
-    if (!m.lastActiveAt) return false;
-    return Date.now() - new Date(m.lastActiveAt).getTime() < 5 * 60 * 1000;
-  });
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [allLogs, setAllLogs] = useState<ProjectLog[]>([]);
   const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
@@ -533,22 +526,33 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
               className="flex -space-x-1.5 cursor-pointer hover:opacity-80 transition-opacity mr-2" 
               title="Active Specialists Directory"
             >
-              {onlineMembers.slice(0, 5).map(m => (
-                <div key={m.uid} className="relative group cursor-help">
-                  <img 
-                    src={m.avatarUrl || undefined} 
-                    alt={m.displayName}
-                    className="size-7 rounded-full border-2 border-slate-800 object-cover bg-white" 
-                  />
-                  <div 
-                    className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-slate-800 bg-emerald-500 animate-[pulse_2s_infinite]" 
-                    title={`${m.displayName} - Online`}
-                  />
-                </div>
-              ))}
-              {onlineMembers.length > 5 && (
+              {roster.slice(0, 5).map(m => {
+                const isMe = m.uid === currentUser.uid;
+                const isOnline = (() => {
+                  if (isMe) return true;
+                  if (m.isOnline !== true) return false;
+                  if (!m.lastActiveAt) return false;
+                  const activeTime = new Date(m.lastActiveAt).getTime();
+                  return Date.now() - activeTime < 5 * 60 * 1000;
+                })();
+
+                return (
+                  <div key={m.uid} className="relative group cursor-help">
+                    <img 
+                      src={m.avatarUrl || undefined} 
+                      alt={m.displayName}
+                      className="size-7 rounded-full border-2 border-slate-800 object-cover bg-white" 
+                    />
+                    <div 
+                      className={`absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-slate-800 ${isOnline ? "bg-emerald-500 animate-[pulse_2s_infinite]" : "bg-slate-400"}`}
+                      title={`${m.displayName} - ${isOnline ? "Online" : "Offline"}`}
+                    />
+                  </div>
+                );
+              })}
+              {roster.length > 5 && (
                 <div className="size-7 rounded-full border-2 border-slate-800 bg-slate-700 flex items-center justify-center text-[9px] font-bold text-white relative z-10">
-                  +{onlineMembers.length - 5}
+                  +{roster.length - 5}
                 </div>
               )}
             </div>

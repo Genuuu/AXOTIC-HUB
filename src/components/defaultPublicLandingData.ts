@@ -10,7 +10,6 @@ export interface BuildSpec {
   category: string;
   title: string;
   subtitle: string;
-  technologies: string;
   imageUrl?: string;
 }
 
@@ -35,6 +34,13 @@ export interface SocialChannel {
   url: string;
 }
 
+export interface SponsorInfo {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  websiteUrl?: string;
+}
+
 export interface PublicLandingData {
   heroTitle: string;
   heroSubtitle: string;
@@ -53,11 +59,13 @@ export interface PublicLandingData {
   sponsorBenefitDesc: string;
   contactEmail: string;
   socialChannels?: SocialChannel[];
+  sponsors?: SponsorInfo[];
   galleryPhotos?: GalleryPhoto[];
   showIntro?: boolean;
   showAboutUs?: boolean;
   showBuilds?: boolean;
   showContactUs?: boolean;
+  showSponsors?: boolean;
 }
 
 export const defaultPublicLandingData: PublicLandingData = {
@@ -74,31 +82,31 @@ export const defaultPublicLandingData: PublicLandingData = {
       category: "Autonomous Systems",
       title: "Micromouse & High-Speed Line Followers",
       subtitle: "High-speed wall detection and labyrinth-solving vehicles.",
-      technologies: "Computer Vision core nodes, Real-Time Digital Signal Processing (DSP), VL53L0X Time-of-Flight (ToF) arrays."
     },
     {
       id: "build-combat",
       category: "Combat Robotics",
       title: "Heavy-Duty Arena Fighting Bots",
       subtitle: "Competitive horizontal spinning combat platforms for national events.",
-      technologies: "Isolated High-Torque Brushless Motor speed control, Kinetic Energy Weapon dynamics, Hardened Steel and Carbon Fiber armor fabrication."
     }
   ],
   trackRecords: [],
   sponsorHeader: "Collaborative Sponsorship",
   sponsorTitle: "SUPPORT THE BUILD. ELEVATE OUR IMPACT.",
   sponsorAskTitle: "The Ask",
-  sponsorAskDesc: "Building autonomous robots and horizontal spinner combat systems requires advanced raw substrates. We are seeking financial backers, equipment sponsors (LiPo battery arrays, brushless ESC motor units, proprietary aluminum blocks), or machining partners specializing in CNC milling or precision SLA 3D printing.",
+  sponsorAskDesc: "Developing competitive autonomous robots and advanced combat systems requires high-quality engineering resources. We are actively seeking financial backers, equipment sponsors, and manufacturing partners with expertise in CNC machining or precision SLA 3D printing.",
   sponsorBenefitTitle: "The Benefit",
-  sponsorBenefitDesc: "Your company, emblem, or corporate brand will get high-visibility placement across our engineered robot chassis covers, official combat apparel shirts, press media, and custom banners inside this very engineering management applet.",
+  sponsorBenefitDesc: "In recognition of your support, your organization's brand will receive prominent, high-visibility placement across our competition robot chassis, official team apparel, press materials, and integrated digital platforms.",
   contactEmail: "axotic.kdu@gmail.com",
   socialChannels: [
     { id: "sc-1", platform: "Instagram", url: "https://instagram.com" },
     { id: "sc-2", platform: "LinkedIn", url: "https://linkedin.com" }
   ],
+  sponsors: [],
   galleryPhotos: [],
   showIntro: true,
   showAboutUs: true,
   showBuilds: true,
-  showContactUs: true
+  showContactUs: true,
+  showSponsors: true
 };

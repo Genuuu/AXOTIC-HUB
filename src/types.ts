@@ -151,6 +151,13 @@ export interface AppNotification {
 
 export type CompetitionType = "Battlebot" | "Micromouse" | "Task Robot" | "IOT" | "Idea pitch" | "Other";
 
+export interface CompetitionResult {
+  memberId: string;
+  placement: string;
+  award?: string;
+  notes?: string;
+}
+
 export interface Competition {
   id: string;
   title: string;
@@ -166,6 +173,10 @@ export interface Competition {
   isRegistered: boolean; // whether our team is registered for this competition
   registeredName?: string; // official registration name of the team, if registered
   registeredUserIds: string[]; // array of userIds of team members registered to attend/participate
+  status?: "scheduled" | "postponed" | "cancelled" | "finished";
+  results?: CompetitionResult[];
+  teamPlacement?: string;
+  teamMedals?: string;
 }
 
 export interface AdminLog {

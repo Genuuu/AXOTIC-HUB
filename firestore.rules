@@ -1,163 +1,134 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    function isSignedIn() {
+  
+    // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
+    
+    // Check if the request is authenticated via Firebase Auth
+    function isAuthenticated() {
       return request.auth != null;
     }
-
+    
+    // Retrieve the requesting user's document from the 'users' collection
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-
-    function hasUserDoc() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
-    function isBootstrappedAdmin() {
-      return isSignedIn() && (
-        ('email' in request.auth.token && request.auth.token.email == 'genukakisara@gmail.com') ||
-        (hasUserDoc() && 'email' in getUserData() && getUserData().email == 'genukakisara@gmail.com')
-      );
-    }
-
+    
+    // Check if the user is an admin
     function isAdmin() {
-      return isSignedIn() && (
-        isBootstrappedAdmin() || 
-        (hasUserDoc() && 'role' in getUserData() && getUserData().role == 'admin')
-      );
+      return isAuthenticated() && getUserData().role == 'admin';
     }
 
-    function isMember() {
-      return isSignedIn() && (
-        isBootstrappedAdmin() || 
-        (hasUserDoc() && 'role' in getUserData() && (getUserData().role == 'member' || getUserData().role == 'admin'))
-      );
+    // ==========================================
+    // PUBLIC CONFIGURATION & SETTINGS
+    // ==========================================
+
+    // Public Landing Page configuration
+    match /landing/{docId} {
+      allow read: if true; // Publicly viewable by anyone on the landing page
+      allow write: if isAdmin();
+    }
+    
+    // App configuration settings
+    match /settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Connection test document
+    match /test/{docId} {
+      allow read, write: if isAuthenticated();
     }
 
+    // ==========================================
+    // USERS & ACCESS CONTROL
+    // ==========================================
+
+    // Users collection
     match /users/{userId} {
-      allow read: if true;
-      allow create: if isSignedIn() && (
-        (request.auth.uid == userId && (
-          ('role' in request.resource.data && (request.resource.data.role == 'member' || request.resource.data.role == 'admin'))
-        )) ||
-        isAdmin()
-      );
-      allow update: if isSignedIn() && (
-        (request.auth.uid == userId && 
-         'role' in request.resource.data && 'role' in resource.data && request.resource.data.role == resource.data.role && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'academicYear', 'subTeam', 'specifications', 'birthday', 'isOnline', 'lastActiveAt', 'phoneNumber'])) ||
-        isAdmin() ||
-        ('firebase' in request.auth.token && 'sign_in_provider' in request.auth.token.firebase && request.auth.token.firebase.sign_in_provider == 'anonymous')
-      );
-      allow delete: if isAdmin() || (isSignedIn() && ('email' in resource.data) && ('email' in request.auth.token) && resource.data.email == request.auth.token.email);
+      // Any authenticated user can read other users (for the roster)
+      allow read: if isAuthenticated();
+      
+      // Users can create their own profile during initial signup/linking
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Users can update their own profile, or admins can update any profile (e.g. promoting roles)
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      
+      // Only admins can delete members from the roster
+      allow delete: if isAdmin();
     }
+
+    // ==========================================
+    // INVENTORY & CATEGORIES
+    // ==========================================
+
+    match /inventory/{docId} {
+      // Authenticated users can view and edit inventory (for checking out parts)
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /categories/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // Only admins can add/remove inventory categories
+    }
+
+    // ==========================================
+    // PROJECTS & HARDWARE
+    // ==========================================
 
     match /projects/{projectId} {
-      allow read: if true;
-      allow create: if isMember() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isMember() && (
-        isAdmin() ||
-        (('status' in resource.data && resource.data.status != 'Finished') && (
-          (request.auth.uid == resource.data.createdBy || request.auth.uid == resource.data.leaderId || ('memberIds' in resource.data && request.auth.uid in resource.data.memberIds)) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'status', 'leaderId', 'leaderName', 'memberIds', 'memberNames', 'deadline', 'startDate', 'kicadLink', 'updatedAt', 'budget', 'estimatedCost', 'costSplitType', 'memberCostSplits', 'budgetItems', 'sponsorFundings', 'memberContributions', 'peerTransfers'])
-        ))
-      );
-      allow delete: if isAdmin() || (isMember() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
+      // Team members can view and manage projects
+      allow read, write: if isAuthenticated(); 
+      
+      match /hardware/{hwId} {
+        allow read, write: if isAuthenticated();
+      }
+      
+      match /logs/{logId} {
+        allow read, write: if isAuthenticated();
+      }
     }
 
-    match /projects/{projectId}/logs/{logId} {
-      allow read: if isSignedIn();
-      allow create: if isMember() && ('authorId' in request.resource.data) && request.resource.data.authorId == request.auth.uid;
-      allow update: if isMember() && (
-        isAdmin() ||
-        (('authorId' in resource.data) && request.auth.uid == resource.data.authorId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content']))
-      );
-      allow delete: if isAdmin();
+    // ==========================================
+    // COMPETITIONS
+    // ==========================================
+
+    match /competitions/{compId} {
+      // Team members can view and manage competitions
+      allow read, write: if isAuthenticated();
     }
 
-    match /projects/{projectId}/hardware/{hardwareId} {
-      allow read: if isSignedIn();
-      allow create: if isMember() && ('allocatedBy' in request.resource.data) && request.resource.data.allocatedBy == request.auth.uid;
-      allow update: if isMember() && (
-        isAdmin() ||
-        (('allocatedBy' in resource.data) && request.auth.uid == resource.data.allocatedBy && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']))
-      );
-      allow delete: if isAdmin();
-    }
-
-    match /inventory/{itemId} {
-      allow read: if isSignedIn();
-      allow create: if isMember();
-      allow update: if isMember() && (
-        isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['availableQuantity', 'name', 'category', 'description', 'totalQuantity', 'location', 'specification'])
-      );
-      allow delete: if isMember() || isAdmin();
-    }
-
-    match /categories/{categoryId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
+    // ==========================================
+    // IDEAS BOARD
+    // ==========================================
 
     match /ideas/{ideaId} {
-      allow read: if isSignedIn();
-      allow create: if isMember() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isMember() && (
-        isAdmin() ||
-        (('status' in resource.data && resource.data.status != 'Promoted') && (
-          request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'description', 'category', 'votes', 'votedIds', 'status', 'promotedProjectId', 'updatedAt', 'comments'])
-        ))
-      );
-      allow delete: if isAdmin() || (isMember() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    match /notifications/{notificationId} {
-      allow read: if isSignedIn();
-      allow create: if isMember();
-      allow update: if isMember();
-      allow delete: if isAdmin() || (isSignedIn() && ('createdBy' in resource.data) && request.auth.uid == resource.data.createdBy);
-    }
+    // ==========================================
+    // NOTIFICATIONS & LOGGING
+    // ==========================================
 
-    match /competitions/{competitionId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && ('createdBy' in request.resource.data) && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'date', 'location', 'link', 'remindUserIds', 'isRegistered', 'registeredName', 'registeredUserIds', 'type'])
-      );
-      allow delete: if isAdmin() || (isSignedIn() && ('createdBy' in resource.data) && resource.data.createdBy == request.auth.uid);
-    }
-
-    match /landing/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
+    match /notifications/{notifId} {
+      allow read, write: if isAuthenticated();
     }
 
     match /admin_logs/{logId} {
       allow read: if isAdmin();
-      allow create: if isAdmin();
-      allow update: if false;
-      allow delete: if isAdmin();
+      // Any authenticated action might trigger an admin log
+      allow create: if isAuthenticated(); 
+      // Logs are immutable and should never be edited or deleted
+      allow update, delete: if false; 
     }
-
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /test/{docId} {
-      allow read: if true;
-    }
-
+    
+    // Firebase Extensions Mail collection (if used for sending emails)
     match /mail/{mailId} {
-      allow read: if isAdmin();
       allow create: if isAdmin();
-      allow update, delete: if false;
+      allow read, update, delete: if false;
     }
   }
 }

@@ -11,7 +11,9 @@ import {
   Linkedin, 
   Youtube, 
   Sparkles, 
-  Cpu, 
+  Cpu,
+  CircuitBoard,
+  Zap, 
   Layers, 
   Activity,
   ChevronLeft,
@@ -131,16 +133,7 @@ const BuildCard = ({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
             {spec.subtitle}
           </p>
         </div>
-        {spec.technologies && (
-          <div className="mt-4 pt-4 border-t border-slate-100">
-             <span className="text-[9px] font-mono tracking-widest text-slate-400 block uppercase font-bold mb-1.5">
-               TECHNOLOGIES
-             </span>
-             <p className="text-[10px] md:text-xs text-slate-600 dark:text-slate-300 font-mono font-medium line-clamp-2">
-               {spec.technologies}
-             </p>
-          </div>
-        )}
+        
       </div>
     </motion.div>
   );
@@ -226,11 +219,6 @@ const BuildLightbox = React.forwardRef(({ spec, initialIdx, idx, onClose }: any,
           <p className="text-white/80 text-sm mt-2 leading-relaxed">
             {spec.subtitle}
           </p>
-          {spec.technologies && (
-            <p className="text-xs text-blue-300 tracking-wider font-mono uppercase mt-4 block">
-              {spec.technologies}
-            </p>
-          )}
         </motion.div>
       </motion.div>
     </motion.div>
@@ -317,8 +305,8 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
 
   return (
     <div 
-      id="public-landing-container" 
-      className="min-h-screen bg-slate-50/60 dark:bg-slate-950 text-[#0f2e46] dark:text-white flex flex-col items-center pt-4 sm:pt-8 md:pt-12 px-4 sm:px-8 md:px-12 pb-4 relative font-sans antialiased"
+       id="public-landing-container" 
+       className="min-h-screen bg-[#fafafa] dark:bg-[#0a0a0a] text-[#0f2e46] dark:text-white flex flex-col items-center pt-4 sm:pt-8 md:pt-12 px-4 sm:px-8 md:px-12 pb-4 relative font-sans antialiased overflow-hidden"
     >
       {/* Scroll Progress Bar */}
       <motion.div 
@@ -328,14 +316,14 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
       
       {/* Decorative clean grid backdrop with parallax */}
       <div className="absolute inset-0 overflow-clip pointer-events-none -z-10">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-500/10 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/10 blur-[100px]" />
         <motion.div 
           style={{ y: backgroundY }}
-          className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-35 dark:opacity-20" 
+          className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" 
         />
       </div>
       
-      
-
       {/* Main Header / Secure Portal Bar */}
       <motion.header 
         style={{ opacity: 1 }}
@@ -348,31 +336,27 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
           <img 
             src={activeLogoUrl || undefined} 
             alt="AXOTIC Logo" 
-            className="h-10 object-contain drop-shadow-sm" 
+            className="h-14 sm:h-16 md:h-20 w-auto max-w-[60vw] sm:max-w-[300px] md:max-w-[400px] object-contain drop-shadow-sm transition-all" 
             referrerPolicy="no-referrer"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
             }}
           />
-          <div className="flex flex-col">
-            <span className="font-sans font-extrabold text-sm tracking-[0.18em] text-[#0f2e46] dark:text-white uppercase">
-              TEAM AXOTIC
-            </span>
-          </div>
         </div>
 
-        {/* Navigation Links */}
-        <nav className="flex items-center gap-6 hidden md:flex">
-          {['Intro', 'About Us', 'Our Builds', 'Contact'].map((item) => {
+        <nav className="hidden md:flex items-center gap-6">
+          {['Intro', 'About Us', 'Our Builds', 'Sponsors', 'Contact'].map((item) => {
             const isVisible = 
               (item === 'Intro' && landingData.showIntro !== false) ||
               (item === 'About Us' && landingData.showAboutUs !== false) ||
               (item === 'Our Builds' && landingData.showBuilds !== false) ||
+              (item === 'Sponsors' && landingData.showSponsors !== false) ||
               (item === 'Contact' && landingData.showContactUs !== false);
             
             if (!isVisible) return null;
 
-            const id = item === 'Contact' ? 'contact-section' : item === 'Our Builds' ? 'builds-section' : item === 'About Us' ? 'about-section' : 'intro-section';
+            const id = item === 'Contact' ? 'contact-section' : item === 'Sponsors' ? 'sponsors-section' : item === 'Our Builds' ? 'builds-section' : item === 'About Us' ? 'about-section' : 'intro-section';
+
             return (
               <motion.button
                 key={item}
@@ -396,17 +380,21 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         <motion.button
           id="top-nav-portal-btn"
           onClick={onOpenLogin}
-          whileHover={{ scale: 1.03, backgroundColor: "#0f2e46", color: "#ffffff" }}
+          whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
-          className="text-[10px] sm:text-xs font-bold tracking-wider text-[#0f2e46] dark:text-white hover:text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl border border-[#0f2e46]/20 dark:border-white/20 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md transition-all duration-200 font-mono cursor-pointer flex items-center gap-2 shadow-xs whitespace-nowrap"
+          className="relative group overflow-hidden rounded-xl px-4 sm:px-6 py-2 sm:py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-xs font-bold tracking-widest font-mono cursor-pointer shadow-md transition-all hover:shadow-xl hover:shadow-blue-500/20"
         >
-          <Lock className="size-3.5" /> <span className="hidden sm:inline">SECURE GATEWAY</span><span className="sm:hidden">LOGIN</span>
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <span className="relative flex items-center gap-2 group-hover:text-white transition-colors duration-300">
+            <Lock className="size-3.5" /> 
+            <span className="hidden sm:inline">SECURE GATEWAY</span>
+            <span className="sm:hidden">LOGIN</span>
+          </span>
         </motion.button>
       </motion.header>
 
       {/* Main Public Page Content Container */}
       <main className="w-full max-w-4xl flex-1 z-10 flex flex-col items-stretch space-y-32 md:space-y-40 pt-10 pb-24">
-
         {/* SECTION 1: INTRO */}
         {landingData.showIntro !== false && (
           <motion.section 
@@ -421,11 +409,10 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             </div>
             
             <h1 
-              className="text-3xl sm:text-5xl md:text-6xl font-black text-[#0f2e46] dark:text-white tracking-tight leading-tight max-w-3xl mb-8"
-              dangerouslySetInnerHTML={{ __html: (landingData.heroTitle || "").replace("AXOTIC", `<span class="relative inline-block text-blue-600 dark:text-blue-400">AXOTIC<span class="absolute left-0 bottom-0.5 w-full h-[6px] bg-blue-100 dark:bg-blue-900/60 -z-10" /></span>`) }}
+              className="text-4xl sm:text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#0f2e46] to-slate-500 dark:from-white dark:to-slate-400 tracking-tighter leading-[1.1] max-w-4xl mb-8 drop-shadow-sm"
+              dangerouslySetInnerHTML={{ __html: (landingData.heroTitle || "").replace("AXOTIC", `<span class="text-blue-600 dark:text-blue-500">AXOTIC</span>`) }}
             />
-
-            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-medium max-w-xl leading-relaxed mb-4">
+            <p className="text-base sm:text-lg text-slate-500 dark:text-slate-400 font-light max-w-2xl leading-relaxed mb-8">
               {landingData.heroSubtitle}
             </p>
 
@@ -433,15 +420,17 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
               <div className="flex gap-4 mt-4">
                 <a 
                   href="#about-section"
-                  className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-blue-600 transition-colors py-2 px-3 flex items-center gap-1 font-mono"
+                  className="group relative inline-flex items-center justify-center px-8 py-3 text-sm font-bold tracking-widest uppercase text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-full overflow-hidden shadow-lg transition-all hover:scale-105 hover:shadow-blue-500/30"
                 >
-                  Learn More <ArrowRight className="size-3.5" />
+                  <span className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black" />
+                  <span className="relative flex items-center gap-2">
+                    Discover More <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
+                  </span>
                 </a>
               </div>
             )}
           </motion.section>
         )}
-
         {/* SECTION 2: ABOUT US */}
         {landingData.showAboutUs !== false && (
           <motion.section 
@@ -450,15 +439,15 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             whileInView="visible"
             viewport={{ once: true, margin: "-100px" }}
             variants={slowFadeIn}
-            className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 rounded-3xl p-8 sm:p-12 shadow-sm relative overflow-hidden scroll-mt-32"
+            className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-[2.5rem] p-8 sm:p-14 shadow-2xl relative overflow-hidden scroll-mt-32"
           >
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start relative z-10">
             <div className="md:col-span-4 space-y-3">
-              <span className="text-[10px] font-bold tracking-widest text-slate-400 font-mono uppercase block">SECTION 02</span>
-              <h2 className="text-2xl sm:text-3xl font-black text-[#0f2e46] dark:text-white tracking-tight uppercase">
+              <span className="text-[10px] font-bold tracking-widest text-blue-500 font-mono uppercase block">SECTION 02</span>
+              <h2 className="text-3xl sm:text-5xl font-black text-[#0f2e46] dark:text-white tracking-tighter uppercase mb-2">
                 {landingData.whoWeAreOriginTitle}
               </h2>
-              <div className="w-12 h-1 bg-blue-600 rounded" />
+              <div className="w-12 h-1 bg-blue-600 rounded mt-4" />
             </div>
 
             <div className="md:col-span-8 space-y-8">
@@ -476,7 +465,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                     <Cpu className="size-5" />
                   </div>
                   <span className="text-[10px] font-mono tracking-widest text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">CORE 01</span>
-                  <span className="text-xl font-bold text-white tracking-tight">Electrical<br/>Systems</span>
+                  <span className="text-xl font-bold text-white tracking-tight">Electrical &<br/>Electronic</span>
                   <div className="w-full h-1 bg-slate-800 mt-6 rounded-full overflow-hidden">
                     <div className="w-full h-full bg-blue-500 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 ease-out" />
                   </div>
@@ -490,7 +479,7 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                     <Layers className="size-5" />
                   </div>
                   <span className="text-[10px] font-mono tracking-widest text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">CORE 02</span>
-                  <span className="text-xl font-bold text-white tracking-tight">Mechanical<br/>& CAD</span>
+                  <span className="text-xl font-bold text-white tracking-tight">Mechanical</span>
                   <div className="w-full h-1 bg-slate-800 mt-6 rounded-full overflow-hidden">
                     <div className="w-full h-full bg-emerald-500 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 ease-out" />
                   </div>
@@ -504,13 +493,12 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
                     <Activity className="size-5" />
                   </div>
                   <span className="text-[10px] font-mono tracking-widest text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">CORE 03</span>
-                  <span className="text-xl font-bold text-white tracking-tight">Biomedical<br/>R&D</span>
+                  <span className="text-xl font-bold text-white tracking-tight">Biomedical</span>
                   <div className="w-full h-1 bg-slate-800 mt-6 rounded-full overflow-hidden">
                     <div className="w-full h-full bg-indigo-500 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500 ease-out" />
                   </div>
                 </div>
               </div>
-
               {/* Division subteams dynamic integration */}
               {landingData.subTeams && landingData.subTeams.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-slate-100 space-y-3">
@@ -548,16 +536,15 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             className="space-y-8 text-left scroll-mt-32"
           >
           <div className="space-y-2">
-            <span className="text-[10px] font-bold tracking-widest text-slate-400 font-mono uppercase block">SECTION 03</span>
-            <h2 className="text-2xl sm:text-3xl font-black text-[#0f2e46] dark:text-white tracking-tight uppercase">
+            <div className="flex items-center gap-4 mb-4">
+              <span className="text-[10px] font-bold tracking-widest text-blue-500 font-mono uppercase block">SECTION 03</span>
+              <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+            </div>
+            <h2 className="text-3xl sm:text-5xl font-black text-[#0f2e46] dark:text-white tracking-tighter uppercase mb-6">
               Our Builds
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed hidden md:block">
-              Click on any build module block below to view its classification specifications in detail.
-            </p>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed block md:hidden">
-              Tap any build module below to view its full specifications.
-            </p>
+            
+            
           </div>
 
           {/* Grid of Images / Interactive Build Cards */}
@@ -594,8 +581,11 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             className="space-y-6 text-left scroll-mt-32"
           >
             <div className="space-y-1">
-              <span className="text-[10px] font-bold tracking-widest text-slate-400 font-mono uppercase block">SECTION 03.5</span>
-              <h2 className="text-2xl sm:text-3xl font-black text-[#0f2e46] dark:text-white tracking-tight uppercase">
+              <div className="flex items-center gap-4 mb-4">
+                <span className="text-[10px] font-bold tracking-widest text-blue-500 font-mono uppercase block">SECTION 03.5</span>
+                <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+              </div>
+              <h2 className="text-3xl sm:text-5xl font-black text-[#0f2e46] dark:text-white tracking-tighter uppercase mb-6">
                 Milestones & Trajectory
               </h2>
             </div>
@@ -629,8 +619,11 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             className="space-y-6 text-left scroll-mt-32"
           >
             <div className="space-y-1">
-              <span className="text-[10px] font-bold tracking-widest text-slate-400 font-mono uppercase block">SECTION 03.6</span>
-              <h2 className="text-2xl sm:text-3xl font-black text-[#0f2e46] dark:text-white tracking-tight uppercase">
+              <div className="flex items-center gap-4 mb-4">
+                <span className="text-[10px] font-bold tracking-widest text-blue-500 font-mono uppercase block">SECTION 03.6</span>
+                <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+              </div>
+              <h2 className="text-3xl sm:text-5xl font-black text-[#0f2e46] dark:text-white tracking-tighter uppercase mb-6">
                 Team Photos
               </h2>
             </div>
@@ -691,7 +684,86 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
           </motion.section>
         )}
 
-        {/* SECTION 4: CONTACT US */}
+        {/* SECTION 4: SPONSORS */}
+        {landingData.showSponsors !== false && (
+        <motion.section 
+          id="sponsors-section"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+          variants={slowFadeIn}
+          className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-slate-200 dark:border-white/10 rounded-[2.5rem] p-8 sm:p-14 shadow-2xl relative overflow-hidden scroll-mt-32"
+        >
+          <div className="relative z-10">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-slate-800 rounded-full text-blue-600 dark:text-blue-400 font-mono text-[9px] font-bold tracking-widest uppercase mb-4 border border-blue-100 dark:border-slate-700">
+              SECTION 04 • {landingData.sponsorHeader || "Sponsorship"}
+            </span>
+            
+            <h2 className="text-3xl sm:text-5xl font-black text-[#0f2e46] dark:text-white tracking-tighter uppercase mb-8 max-w-3xl">
+              {landingData.sponsorTitle || "Support the Build."}
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-3">
+                  The Ask
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-normal">
+                  {landingData.sponsorAskDesc}
+                </p>
+              </div>
+              
+              {landingData.sponsorBenefitDesc && (
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-3">
+                    The Benefit
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-normal">
+                    {landingData.sponsorBenefitDesc}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {landingData.sponsors && landingData.sponsors.length > 0 && (
+              <div className="mt-12 pt-12 border-t border-slate-200 dark:border-slate-800/50">
+                <h3 className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-8">
+                  Our Current Sponsors & Partners
+                </h3>
+                <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
+                  {landingData.sponsors.map((sponsor) => (
+                    <a
+                      key={sponsor.id}
+                      href={sponsor.websiteUrl || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group flex flex-col items-center gap-3 transition-transform hover:scale-105"
+                    >
+                      {sponsor.logoUrl ? (
+                        <div className="h-16 w-32 md:h-20 md:w-40 relative flex items-center justify-center grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300">
+                          <img 
+                            src={sponsor.logoUrl} 
+                            alt={sponsor.name} 
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-16 px-6 relative flex items-center justify-center bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50 opacity-60 group-hover:opacity-100 transition-all duration-300">
+                          <span className="text-sm font-bold text-slate-600 dark:text-slate-300 tracking-wider">
+                            {sponsor.name}
+                          </span>
+                        </div>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.section>
+        )}
+
+        {/* SECTION 5: CONTACT US */}
         {landingData.showContactUs !== false && (
         <motion.section 
           id="contact-section"
@@ -699,31 +771,24 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
           whileInView="visible"
           viewport={{ once: true, margin: "-100px" }}
           variants={slowFadeIn}
-          className="bg-[#0f2e46] text-white rounded-3xl p-8 sm:p-12 shadow-md relative overflow-hidden scroll-mt-32"
+          className="bg-[#0f2e46] text-white rounded-[2.5rem] p-8 sm:p-14 shadow-2xl relative overflow-hidden scroll-mt-32"
         >
           {/* Subtle neon accents */}
           
-          
-
           <div className="flex flex-col lg:flex-row items-stretch justify-between gap-8 z-10 relative">
-            <div className="space-y-5 lg:max-w-[60%] flex flex-col justify-between">
+            <div className="space-y-5 lg:max-w-[60%] flex flex-col justify-center">
               <div>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full text-blue-200 border border-white/5 font-mono text-[9px] font-bold tracking-widest uppercase mb-4">
-                  SECTION 04 • {landingData.sponsorHeader || "CONTACT US"}
+                  SECTION 05 • CONTACT US
                 </span>
                 
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight uppercase font-mono mb-4">
-                  {landingData.sponsorTitle || "Contact Us"}
+                <h2 className="text-3xl sm:text-5xl font-black tracking-tighter uppercase mb-6">
+                  Get in Touch
                 </h2>
                 
                 <p className="text-xs sm:text-sm text-slate-350 leading-relaxed font-light">
-                  {landingData.sponsorAskDesc || "Pushing the limits of robotics takes resources. Connect with us for sponsorships, technical collaborations, or general inquiries."}
+                  Pushing the limits of robotics takes resources. Connect with us for technical collaborations, media inquiries, or general questions.
                 </p>
-                {landingData.sponsorBenefitDesc && (
-                  <p className="text-xs sm:text-sm text-blue-200 leading-relaxed font-normal mt-2">
-                    💡 Benefit: {landingData.sponsorBenefitDesc}
-                  </p>
-                )}
               </div>
 
               {/* Contact Email Highlight Row */}

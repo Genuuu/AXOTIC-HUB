@@ -248,7 +248,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             <img 
               src={activeLogoUrl || undefined} 
               alt="AXOTIC Logo" 
-              className="h-7 object-contain" 
+              className="h-12 md:h-16 w-auto max-w-[70vw] object-contain transition-all" 
               referrerPolicy="no-referrer"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';

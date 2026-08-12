@@ -20,17 +20,22 @@ import {
   BellOff, 
   Search, 
   Filter, 
-  Trash2, 
+  Trash2,
+  Edit3, 
   Clock, 
   Sparkles, 
   Megaphone,
   X,
   AlertCircle,
-  Check
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  LayoutList
 } from "lucide-react";
 import { UserProfile, Competition, CompetitionType } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { CountdownTimer } from "./CountdownTimer";
+import CompetitionResultsModal from "./CompetitionResultsModal";
 
 interface CompetitionsHubProps {
   currentUser: UserProfile;
@@ -89,6 +94,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
 
   // Modal Control States
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editCompId, setEditCompId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newDate, setNewDate] = useState("");
@@ -114,6 +120,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<string[]>([]);
   const [diagnosticStatus, setDiagnosticStatus] = useState<"idle" | "running" | "success" | "error">("idle");
+  const [resultsModalComp, setResultsModalComp] = useState<Competition | null>(null);
 
   const runDiagnostics = async () => {
     setDiagnosticStatus("running");
@@ -336,6 +343,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
   }, [currentUser.isOfflineMock]);
 
   // Handle Competition Addition
+  
   const handleAddCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
@@ -355,72 +363,117 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
 
     setSubmitting(true);
 
-    const compData = {
-      title: newTitle.trim(),
-      description: newDesc.trim(),
-      date: isTbdDate ? "TBD" : newDate,
-      location: newLocation.trim(),
-      link: newLink.trim() || "",
-      type: newType,
-      createdBy: currentUser.uid,
-      creatorName: currentUser.displayName,
-      createdAt: new Date().toISOString(),
-      remindUserIds: [currentUser.uid], // Creator is auto-reminded
-      isRegistered: newIsRegistered,
-      registeredName: newIsRegistered ? newRegisteredName.trim() : "",
-      registeredUserIds: newRegisteredUserIds
-    };
-
     if (currentUser.isOfflineMock) {
       const local = localStorage.getItem("axotic_mock_competitions");
       const currentList: Competition[] = local ? JSON.parse(local) : [];
-      const newComp: Competition = {
-        id: `mock-comp-${Date.now()}`,
-        ...compData,
-        link: compData.link || ""
-      };
       
-      const updatedList = [...currentList, newComp].sort((a, b) => a.date.localeCompare(b.date));
-      localStorage.setItem("axotic_mock_competitions", JSON.stringify(updatedList));
-      
-      // Global alert log mock
-      await createGlobalNotification(
-        "competition_created",
-        `New competition added: ${newComp.title}`,
-        newComp.id,
-        currentUser
-      );
-      await createAdminLog(
-        "competition_added",
-        `Created upcoming competition: ${newComp.title}`,
-        currentUser
-      );
-
-      window.dispatchEvent(new Event("axotic_db_update"));
+      if (editCompId) {
+        const idx = currentList.findIndex(c => c.id === editCompId);
+        if (idx !== -1) {
+          currentList[idx] = {
+            ...currentList[idx],
+            title: newTitle.trim(),
+            description: newDesc.trim(),
+            date: isTbdDate ? "TBD" : newDate,
+            location: newLocation.trim(),
+            link: newLink.trim() || "",
+            type: newType,
+            isRegistered: newIsRegistered,
+            registeredName: newIsRegistered ? newRegisteredName.trim() : "",
+            registeredUserIds: newRegisteredUserIds
+          };
+          localStorage.setItem("axotic_mock_competitions", JSON.stringify(currentList));
+          await createAdminLog("competition_updated", `Updated competition: ${newTitle.trim()}`, currentUser);
+          window.dispatchEvent(new Event("axotic_db_update"));
+        }
+      } else {
+        const newComp: Competition = {
+          id: `mock-comp-${Date.now()}`,
+          title: newTitle.trim(),
+          description: newDesc.trim(),
+          date: isTbdDate ? "TBD" : newDate,
+          location: newLocation.trim(),
+          link: newLink.trim() || "",
+          type: newType,
+          createdBy: currentUser.uid,
+          creatorName: currentUser.displayName,
+          createdAt: new Date().toISOString(),
+          remindUserIds: [currentUser.uid],
+          isRegistered: newIsRegistered,
+          registeredName: newIsRegistered ? newRegisteredName.trim() : "",
+          registeredUserIds: newRegisteredUserIds
+        };
+        const updatedList = [...currentList, newComp].sort((a, b) => a.date.localeCompare(b.date));
+        localStorage.setItem("axotic_mock_competitions", JSON.stringify(updatedList));
+        await createGlobalNotification("competition_created", `New competition added: ${newComp.title}`, newComp.id, currentUser);
+        await createAdminLog("competition_added", `Created upcoming competition: ${newComp.title}`, currentUser);
+        window.dispatchEvent(new Event("axotic_db_update"));
+      }
       setSubmitting(false);
       resetForm();
     } else {
       try {
-        const docRef = await addDoc(collection(db, "competitions"), compData);
-        await createGlobalNotification(
-          "competition_created",
-          `New competition added: ${compData.title}`,
-          docRef.id,
-          currentUser
-        );
-        await createAdminLog(
-          "competition_added",
-          `Created upcoming competition: ${compData.title}`,
-          currentUser
-        );
+        if (editCompId) {
+          await updateDoc(doc(db, "competitions", editCompId), {
+            title: newTitle.trim(),
+            description: newDesc.trim(),
+            date: isTbdDate ? "TBD" : newDate,
+            location: newLocation.trim(),
+            link: newLink.trim() || "",
+            type: newType,
+            isRegistered: newIsRegistered,
+            registeredName: newIsRegistered ? newRegisteredName.trim() : "",
+            registeredUserIds: newRegisteredUserIds
+          });
+          await createAdminLog("competition_updated", `Updated competition: ${newTitle.trim()}`, currentUser);
+        } else {
+          const compData = {
+            title: newTitle.trim(),
+            description: newDesc.trim(),
+            date: isTbdDate ? "TBD" : newDate,
+            location: newLocation.trim(),
+            link: newLink.trim() || "",
+            type: newType,
+            createdBy: currentUser.uid,
+            creatorName: currentUser.displayName,
+            createdAt: new Date().toISOString(),
+            remindUserIds: [currentUser.uid],
+            isRegistered: newIsRegistered,
+            registeredName: newIsRegistered ? newRegisteredName.trim() : "",
+            registeredUserIds: newRegisteredUserIds
+          };
+          const docRef = await addDoc(collection(db, "competitions"), compData);
+          await createGlobalNotification("competition_created", `New competition added: ${compData.title}`, docRef.id, currentUser);
+          await createAdminLog("competition_added", `Created upcoming competition: ${compData.title}`, currentUser);
+        }
         setSubmitting(false);
         resetForm();
       } catch (err: any) {
-        handleFirestoreError(err, OperationType.CREATE, "competitions");
-        setFormError(`Failed to add competition: ${err?.message || err || "Firestore Permission Denied."}`);
+        handleFirestoreError(err, editCompId ? OperationType.UPDATE : OperationType.CREATE, "competitions");
+        setFormError(`Failed to ${editCompId ? 'update' : 'add'} competition: ${err?.message || err || "Firestore Permission Denied."}`);
         setSubmitting(false);
       }
     }
+  };
+
+  const openEditModal = (comp: Competition) => {
+    setEditCompId(comp.id);
+    setNewTitle(comp.title);
+    setNewDesc(comp.description);
+    if (comp.date === "TBD" || comp.date === "To Be Decided") {
+      setIsTbdDate(true);
+      setNewDate("");
+    } else {
+      setIsTbdDate(false);
+      setNewDate(comp.date.split("T")[0]);
+    }
+    setNewLocation(comp.location);
+    setNewLink(comp.link || "");
+    setNewType(comp.type || "Other");
+    setNewIsRegistered(comp.isRegistered || false);
+    setNewRegisteredName(comp.registeredName || "");
+    setNewRegisteredUserIds(comp.registeredUserIds || []);
+    setIsAddOpen(true);
   };
 
   const resetForm = () => {
@@ -435,6 +488,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
     setNewRegisteredName("");
     setNewRegisteredUserIds([]);
     setIsAddOpen(false);
+    setEditCompId(null);
   };
 
   // Toggle a user's registered state on the team's roster for a competition
@@ -530,6 +584,29 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
   };
 
   // Delete Competition
+  const handleStatusChange = async (id: string, newStatus: "scheduled" | "postponed" | "cancelled" | "finished") => {
+    if (currentUser.isOfflineMock) {
+      const local = localStorage.getItem("axotic_mock_competitions");
+      if (local) {
+        const list: Competition[] = JSON.parse(local);
+        const comp = list.find(c => c.id === id);
+        if (comp) {
+          comp.status = newStatus;
+          localStorage.setItem("axotic_mock_competitions", JSON.stringify(list));
+          await createAdminLog("competition_updated", `Changed competition status to ${newStatus}`, currentUser);
+          window.dispatchEvent(new Event("axotic_db_update"));
+        }
+      }
+    } else {
+      try {
+        await updateDoc(doc(db, "competitions", id), { status: newStatus });
+        await createAdminLog("competition_updated", `Changed competition status to ${newStatus}`, currentUser);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.UPDATE, "competitions");
+      }
+    }
+  };
+
   const handleDeleteCompetition = async (id: string, title: string) => {
     if (!window.confirm(`Are you sure you want to remove the competition "${title}"?`)) return;
 
@@ -668,7 +745,10 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
         </div>
 
         {/* Filter Type toggles */}
-        <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 border border-slate-200/40 dark:border-slate-800 p-1 rounded-xl w-full md:w-auto">
+        <div className="flex items-center gap-3">
+
+          
+          <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 border border-slate-200/40 dark:border-slate-800 p-1 rounded-xl w-full md:w-auto">
           <button
             onClick={() => setFilterType("upcoming")}
             className={`flex-1 md:flex-none text-xs font-bold px-4 py-2 rounded-lg transition-all cursor-pointer ${
@@ -699,6 +779,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
           >
             All Scheduled
           </button>
+          </div>
         </div>
       </div>
 
@@ -741,20 +822,38 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                 {/* Competition countdown pill & registration status badge */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {isUpcoming ? (
-                      <span className={`text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border ${
-                        isCritical
-                          ? "bg-red-500/10 text-red-500 border-red-500/20 animate-pulse"
-                          : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                      }`}>
-                        {text}
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200/40 dark:border-slate-700">
-                        Completed
-                      </span>
-                    )}
-
+                    {(() => {
+                      if (comp.status === "cancelled") {
+                        return (
+                          <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20 flex items-center gap-1">
+                            <X className="size-2.5 stroke-[3px]" />
+                            <span>Cancelled</span>
+                          </span>
+                        );
+                      }
+                      if (comp.status === "postponed") {
+                        return (
+                          <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border bg-amber-500/10 text-amber-600 dark:text-amber-450 border-amber-500/20 flex items-center gap-1">
+                            <AlertCircle className="size-2.5 stroke-[3px]" />
+                            <span>Postponed</span>
+                          </span>
+                        );
+                      }
+                      if (!isUpcoming) {
+                        return (
+                          <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200/40 dark:border-slate-700 flex items-center gap-1">
+                            <Check className="size-2.5 stroke-[3px]" />
+                            <span>Past</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 flex items-center gap-1">
+                          <Calendar className="size-2.5 stroke-[3px]" />
+                          <span>Upcoming</span>
+                        </span>
+                      );
+                    })()}
                     {/* Official Registration Status Badge */}
                     {comp.isRegistered ? (
                       <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.8 rounded-md border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 flex items-center gap-1">
@@ -788,13 +887,32 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
 
                   {/* Actions for Creator / Admin */}
                   {(currentUser.role === "admin" || currentUser.uid === comp.createdBy) && (
-                    <button
-                      onClick={() => handleDeleteCompetition(comp.id, comp.title)}
-                      title="Remove competition"
-                      className="text-slate-350 hover:text-red-500 p-1 rounded-md hover:bg-red-500/10 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={comp.status || "scheduled"}
+                        onChange={(e) => handleStatusChange(comp.id, e.target.value as "scheduled" | "postponed" | "cancelled" | "finished")}
+                        className="text-[9px] font-bold uppercase tracking-wider font-mono bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-slate-600 dark:text-slate-400 outline-none cursor-pointer"
+                      >
+                        <option value="scheduled">Scheduled</option>
+                        <option value="postponed">Postponed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="finished">Finished</option>
+                      </select>
+                      <button
+                        onClick={() => openEditModal(comp)}
+                        title="Edit competition"
+                        className="text-slate-350 hover:text-blue-500 p-1 rounded-md hover:bg-blue-500/10 transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="size-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCompetition(comp.id, comp.title)}
+                        title="Remove competition"
+                        className="text-slate-350 hover:text-red-500 p-1 rounded-md hover:bg-red-500/10 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -808,7 +926,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                   </div>
 
                   {/* Countdown Timer Widget */}
-                  <CountdownTimer targetDateStr={comp.date} />
+                  <CountdownTimer targetDateStr={comp.date} status={comp.status} />
 
                   {/* Telemetry info row (Date, Location) */}
                   <div className="space-y-2 border-y border-slate-100 dark:border-slate-900 py-3 text-[11px] text-slate-500 dark:text-slate-400">
@@ -970,8 +1088,79 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                       )}
                     </div>
                   </div>
-                </div>
 
+                  {/* Competition Results Section (Visible when finished) */}
+                  {comp.status === "finished" && (
+                    <div className="pt-3.5 space-y-2.5 border-t border-slate-100 dark:border-slate-900/80">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-black text-amber-500 tracking-wider font-mono">
+                          Competition Results
+                        </span>
+                        {(currentUser.role === "admin" || currentUser.uid === comp.createdBy || (comp.registeredUserIds || []).includes(currentUser.uid)) && (
+                          <button
+                            onClick={() => setResultsModalComp(comp)}
+                            className="text-[10px] text-blue-500 hover:text-blue-600 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Manage Results</span>
+                          </button>
+                        )}
+                      </div>
+                      
+                      {(comp.teamPlacement || comp.teamMedals) && (
+                        <div className="flex flex-col gap-2 p-3 bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-900/10 dark:to-amber-900/5 border border-amber-200/50 dark:border-amber-800/30 rounded-xl mb-3">
+                          {comp.teamPlacement && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-amber-700/70 dark:text-amber-500/70 uppercase tracking-wider">Overall Placement</span>
+                              <span className="text-sm font-black text-amber-600 dark:text-amber-400 font-display">{comp.teamPlacement}</span>
+                            </div>
+                          )}
+                          {comp.teamMedals && (
+                            <div className="flex items-center justify-between border-t border-amber-200/30 dark:border-amber-800/30 pt-2 mt-1">
+                              <span className="text-[10px] font-bold text-amber-700/70 dark:text-amber-500/70 uppercase tracking-wider">Total Awards</span>
+                              <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-200/50 dark:bg-amber-800/50 px-2 py-0.5 rounded-md">{comp.teamMedals}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {comp.results && comp.results.length > 0 ? (
+                        <div className="space-y-2">
+                          {comp.results.map((result, idx) => {
+                            const p = getUserProfile(result.memberId);
+                            return (
+                              <div key={idx} className="flex items-center gap-3 p-2.5 bg-yellow-50/50 dark:bg-yellow-900/10 border border-yellow-200/50 dark:border-yellow-900/30 rounded-xl">
+                                <div className="size-7 rounded-lg bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center shrink-0">
+                                  <Trophy className="size-4 text-yellow-600 dark:text-yellow-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                      {p?.displayName || "Unknown Member"}
+                                    </span>
+                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-yellow-200/50 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-400 rounded-md shrink-0">
+                                      {result.placement}
+                                    </span>
+                                  </div>
+                                  {result.award && (
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                      {result.award}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (!comp.teamPlacement && !comp.teamMedals) ? (
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 font-sans italic p-3 text-center bg-slate-50/50 dark:bg-slate-900/30 rounded-lg border border-dashed border-slate-100 dark:border-slate-900/60">
+                          No results recorded yet.
+                        </p>
+                      ) : null}
+
+                    </div>
+                  )}
+
+                </div>
                 {/* Remind Registrants + Controls */}
                 <div className="mt-4 pt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-900/80">
                   {/* Avatars of people getting reminded */}
@@ -1063,6 +1252,16 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
       )}
 
       {/* SECURITY RULE & CONNECTION DIAGNOSTICS */}
+      
+      {resultsModalComp && (
+        <CompetitionResultsModal
+          competition={resultsModalComp}
+          roster={roster}
+          currentUser={currentUser}
+          onClose={() => setResultsModalComp(null)}
+        />
+      )}
+
       <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200/65 dark:border-slate-800 rounded-2xl p-4 md:p-5 mt-6 text-left shadow-3xs">
         <div className="flex items-center justify-between border-b border-slate-200/55 dark:border-slate-800 pb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -1179,8 +1378,8 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                     <Trophy className="size-4.5" />
                   </div>
                   <div className="text-left">
-                    <h3 className="font-extrabold text-sm uppercase text-slate-800 dark:text-white tracking-wider">Register Arena Event</h3>
-                    <p className="text-[10px] text-slate-400 font-mono">Fill out competition metrics</p>
+                    <h3 className="font-extrabold text-sm uppercase text-slate-800 dark:text-white tracking-wider">{editCompId ? "Edit Arena Event" : "Register Arena Event"}</h3>
+                    <p className="text-[10px] text-slate-400 font-mono">{editCompId ? "Modify competition metrics" : "Fill out competition metrics"}</p>
                   </div>
                 </div>
                 <button
@@ -1409,7 +1608,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                     disabled={submitting}
                     className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
                   >
-                    {submitting ? "Deploying..." : "Add to Roster"}
+                    {submitting ? "Deploying..." : (editCompId ? "Save Changes" : "Add to Roster")}
                   </button>
                 </div>
               </form>
@@ -1420,3 +1619,4 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
     </div>
   );
 }
+

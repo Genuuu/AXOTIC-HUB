@@ -1969,7 +1969,7 @@ export default function AdminSettings({
                         category: "Category Name",
                         title: "Featured Build Platform Name",
                         subtitle: "Platform summary details.",
-                        technologies: "List of key system architectures."
+                        
                       }];
                       setPublicPageData({ ...publicPageData, buildSpecs: updatedBuilds });
                     }}
@@ -2042,19 +2042,7 @@ export default function AdminSettings({
                             </div>
                           </div>
                           
-                          <div className="mt-3">
-                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Primary Integrated Technologies</label>
-                            <input
-                              type="text"
-                              value={build.technologies}
-                              onChange={(e) => {
-                                  const updated = [...publicPageData.buildSpecs];
-                                  updated[idx] = { ...updated[idx], technologies: e.target.value };
-                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
-                              }}
-                              className="w-full text-[11px] font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
-                            />
-                          </div>
+                          
                           <div className="mt-3">
                             <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Background Image URLs (Comma separated)</label>
                             <input
@@ -2193,14 +2181,14 @@ export default function AdminSettings({
                 <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
                   <div className="flex items-center gap-2">
                     <HeartHandshake className="size-4 text-rose-400" />
-                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">E. Contact Us Settings</h3>
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">E. Sponsors</h3>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show Contact</span>
+                    <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show</span>
                     <input 
                       type="checkbox" 
-                      checked={publicPageData.showContactUs !== false}
-                      onChange={(e) => setPublicPageData({ ...publicPageData, showContactUs: e.target.checked })}
+                      checked={publicPageData.showSponsors !== false}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, showSponsors: e.target.checked })}
                       className="sr-only peer" 
                     />
                     <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500 relative"></div>
@@ -2263,9 +2251,134 @@ export default function AdminSettings({
                       className="w-full text-xs p-4 bg-slate-50 border border-slate-200 rounded-xl dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100 leading-relaxed font-sans"
                     />
                   </div>
+                </div>
+                
+                {/* Sponsor Logos Section */}
+                <div className="p-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Sponsor Organizations</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">Manage logos and links for your sponsors.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newId = `sponsor-${Date.now()}`;
+                        const updatedSponsors = [...(publicPageData.sponsors || []), {
+                          id: newId,
+                          name: "New Sponsor",
+                          websiteUrl: "https://"
+                        }];
+                        setPublicPageData({ ...publicPageData, sponsors: updatedSponsors });
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-mono text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="size-3" /> Add Sponsor
+                    </button>
+                  </div>
 
+                  <div className="space-y-3">
+                    {(!publicPageData.sponsors || publicPageData.sponsors.length === 0) ? (
+                      <div className="text-center py-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+                        <p className="text-xs text-slate-500 font-mono">No sponsors added yet</p>
+                      </div>
+                    ) : (
+                      publicPageData.sponsors.map((sponsor, idx) => (
+                        <div key={sponsor.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono font-bold text-slate-400">SPONSOR #{idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = publicPageData.sponsors?.filter(s => s.id !== sponsor.id);
+                                setPublicPageData({ ...publicPageData, sponsors: updated });
+                              }}
+                              className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1">Organization Name</label>
+                              <input
+                                type="text"
+                                value={sponsor.name}
+                                onChange={(e) => {
+                                  const updated = publicPageData.sponsors?.map(s => 
+                                    s.id === sponsor.id ? { ...s, name: e.target.value } : s
+                                  );
+                                  setPublicPageData({ ...publicPageData, sponsors: updated });
+                                }}
+                                className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-700 dark:text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1">Website URL</label>
+                              <input
+                                type="url"
+                                value={sponsor.websiteUrl || ""}
+                                onChange={(e) => {
+                                  const updated = publicPageData.sponsors?.map(s => 
+                                    s.id === sponsor.id ? { ...s, websiteUrl: e.target.value } : s
+                                  );
+                                  setPublicPageData({ ...publicPageData, sponsors: updated });
+                                }}
+                                className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-700 dark:text-white"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-[9px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1">Logo URL (Optional)</label>
+                              <div className="flex gap-2 items-center">
+                                <input
+                                  type="text"
+                                  placeholder="https://..."
+                                  value={sponsor.logoUrl || ""}
+                                  onChange={(e) => {
+                                    const updated = publicPageData.sponsors?.map(s => 
+                                      s.id === sponsor.id ? { ...s, logoUrl: e.target.value } : s
+                                    );
+                                    setPublicPageData({ ...publicPageData, sponsors: updated });
+                                  }}
+                                  className="w-full text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-700 dark:text-white"
+                                />
+                                {sponsor.logoUrl && (
+                                  <div className="w-8 h-8 rounded shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center overflow-hidden">
+                                    <img src={sponsor.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* F. Contact Us Section */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-mail size-4 text-blue-400"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">F. Contact Us</h3>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show</span>
+                    <input 
+                      type="checkbox" 
+                      checked={publicPageData.showContactUs !== false}
+                      onChange={(e) => setPublicPageData({ ...publicPageData, showContactUs: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500 relative"></div>
+                  </label>
+                </div>
+                <div className="p-6">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Sponsorship Contact Email address</label>
+                    <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Contact Email address</label>
                     <input 
                       type="email"
                       value={publicPageData.contactEmail}
@@ -2364,7 +2477,7 @@ export default function AdminSettings({
                 <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-850">
                   <div className="flex items-center gap-2">
                     <Image className="size-4 text-emerald-400" />
-                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">F. Team Photos Gallery</h3>
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">G. Team Photos Gallery</h3>
                   </div>
                   <button
                     type="button"

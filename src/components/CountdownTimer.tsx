@@ -3,9 +3,10 @@ import { Clock } from "lucide-react";
 
 interface CountdownTimerProps {
   targetDateStr: string;
+  status?: "scheduled" | "postponed" | "cancelled" | "finished";
 }
 
-export function CountdownTimer({ targetDateStr }: CountdownTimerProps) {
+export function CountdownTimer({ targetDateStr, status = "scheduled" }: CountdownTimerProps) {
   const isTbd = targetDateStr === "TBD" || targetDateStr === "To Be Decided" || !targetDateStr;
 
   const [timeLeft, setTimeLeft] = useState<{
@@ -17,7 +18,7 @@ export function CountdownTimer({ targetDateStr }: CountdownTimerProps) {
   }>({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true });
 
   useEffect(() => {
-    if (isTbd) return;
+    if (isTbd || status === "postponed" || status === "cancelled") return;
 
     const calculateTimeLeft = () => {
       // Treat target as the start of that day in the user's local timezone
@@ -52,6 +53,32 @@ export function CountdownTimer({ targetDateStr }: CountdownTimerProps) {
 
     return () => clearInterval(intervalId);
   }, [targetDateStr]);
+
+  if (status === "finished") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500 font-mono bg-amber-50 dark:bg-amber-900/20 py-2 px-3 rounded-xl border border-amber-200 dark:border-amber-800/80">
+        <Clock className="size-3.5 text-amber-500" />
+        <span className="font-bold">Competition Finished</span>
+      </div>
+    );
+  }
+  if (status === "postponed") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500 font-mono bg-amber-50 dark:bg-amber-900/20 py-2 px-3 rounded-xl border border-amber-200 dark:border-amber-800/80">
+        <Clock className="size-3.5 text-amber-500" />
+        <span className="font-bold">Competition Postponed</span>
+      </div>
+    );
+  }
+
+  if (status === "cancelled") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-500 font-mono bg-rose-50 dark:bg-rose-900/20 py-2 px-3 rounded-xl border border-rose-200 dark:border-rose-800/80">
+        <Clock className="size-3.5 text-rose-500" />
+        <span className="font-bold">Competition Cancelled</span>
+      </div>
+    );
+  }
 
   if (isTbd) {
     return (
