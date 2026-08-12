@@ -4,7 +4,7 @@ import { signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously } from 
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { Shield, Sparkles, X, Mail, ArrowRight, Key } from "lucide-react";
 import { UserRole, UserProfile } from "../types";
-import defaultLogoUrl from "../../Images/Logo.png";
+const defaultLogoUrl = "/AXOTIC Logo-1.png";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 
 interface AuthModalProps {

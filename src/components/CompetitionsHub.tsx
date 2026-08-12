@@ -1089,8 +1089,8 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                     </div>
                   </div>
 
-                  {/* Competition Results Section (Visible when finished) */}
-                  {comp.status === "finished" && (
+                  {/* Competition Results Section (Visible when finished or ended) */}
+                  {(comp.status === "finished" || !isUpcoming) && (
                     <div className="pt-3.5 space-y-2.5 border-t border-slate-100 dark:border-slate-900/80">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] uppercase font-black text-amber-500 tracking-wider font-mono">

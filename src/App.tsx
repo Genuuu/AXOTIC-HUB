@@ -35,7 +35,7 @@ import {
   Trophy
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
-import defaultLogoUrl from "../Images/Logo.png";
+const defaultLogoUrl = "/AXOTIC Logo-1.png";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { motion, AnimatePresence } from "motion/react";
 

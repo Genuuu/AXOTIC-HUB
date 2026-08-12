@@ -70,7 +70,7 @@ export interface PublicLandingData {
 
 export const defaultPublicLandingData: PublicLandingData = {
   heroTitle: "We're AXOTIC",
-  heroSubtitle: "Engineering the Future of Autonomous Systems and Combat Robotics.",
+  heroSubtitle: "",
   whoWeAreOriginTitle: "About Us",
   whoWeAreOriginDesc: "We are a team of Electrical, Mechanical, and Biomedical engineering undergraduates. We bridge the gap between theoretical coursework and high-stakes arena competitions, working together to design, fabricate, and program advanced robotics from the ground up.",
   whoWeAreMissionTitle: "",

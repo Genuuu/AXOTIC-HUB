@@ -21,7 +21,7 @@ import {
   X
 } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "motion/react";
-import defaultLogoUrl from "../../Images/Logo.png";
+const defaultLogoUrl = "/AXOTIC Logo-1.png";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
