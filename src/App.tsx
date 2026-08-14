@@ -35,7 +35,7 @@ import {
   Trophy
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
-const defaultLogoUrl = "/AXOTIC Logo-1.png";
+const defaultLogoUrl = "/logo.png";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -675,7 +675,7 @@ export default function App() {
       costSplitType: "equal",
       memberCostSplits: {},
       budgetItems: [],
-      sponsorFundings: [],
+      generalFundAllocations: [],
       memberContributions: [],
       peerTransfers: []
     };
@@ -1083,7 +1083,7 @@ export default function App() {
                     {activeTab === "settings" && (effectiveUser?.role === "admin" ? "Hub Command Center & Administration" : "Personal Preferences & App Settings")}
                   </h1>
                   <p className="text-xs text-slate-550 dark:text-slate-400 font-sans mt-1">
-                    {activeTab === "home" && "Overview telemetry on component supply levels, sponsor funding buffers, active competencies, and logs."}
+                    {activeTab === "home" && "Overview telemetry on component supply levels, general fund allocation buffers, active competencies, and logs."}
                     {activeTab === "projects" && "Draft schematics, allocate hardware components, and publish real-time team logs."}
                     {activeTab === "ideas" && "Propose custom robot attachments, electronic controllers, software nodes, upvote concepts, and promote them to active projects."}
                     {activeTab === "inventory" && "Manage stockroom part catalog listings."}

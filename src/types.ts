@@ -28,9 +28,9 @@ export interface BudgetItem {
   paidById: string; // member who provided funding
 }
 
-export interface SponsorFunding {
+export interface GeneralFundAllocation {
   id: string;
-  sponsorName: string;
+  allocationName: string;
   amount: number;
   notes?: string;
   createdAt: string;
@@ -75,7 +75,7 @@ export interface Project {
   costSplitType?: "equal" | "custom";
   memberCostSplits?: { [userId: string]: number };
   budgetItems?: BudgetItem[];
-  sponsorFundings?: SponsorFunding[];
+  generalFundAllocations?: GeneralFundAllocation[];
   memberContributions?: MemberContribution[];
   peerTransfers?: PeerTransfer[];
 }
@@ -190,3 +190,12 @@ export interface AdminLog {
 }
 
 
+
+export interface GeneralFundTransaction {
+  id: string;
+  amount: number;
+  type: "deposit" | "withdrawal";
+  notes: string;
+  date: string;
+  recordedBy: string;
+}

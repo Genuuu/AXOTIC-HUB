@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { db, handleFirestoreError, OperationType } from "../firebase";
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc } from "firebase/firestore";
 import { 
   Compass, 
   Warehouse, 
@@ -21,9 +21,10 @@ import {
   ArrowRight,
   Sparkles,
   Tag,
-  Trophy
+  Trophy,
+  X
 } from "lucide-react";
-import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, AllocatedHardware, Competition } from "../types";
+import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, AllocatedHardware, Competition, GeneralFundTransaction } from "../types";
 import TagInput from "./TagInput";
 import { 
   ResponsiveContainer, 
@@ -35,7 +36,8 @@ import {
   Cell, 
   PieChart, 
   Pie 
-} from "recharts";
+  , LineChart, Line, CartesianGrid } from "recharts";
+import { useWorkspaceSettings } from "../useWorkspaceSettings";
 
 interface HomeDashboardProps {
   currentUser: UserProfile;
@@ -97,6 +99,73 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
   const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
   const [chartView, setChartView] = useState<"parts" | "categories">("parts");
   const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const { generalFundTransactions } = useWorkspaceSettings(currentUser.isOfflineMock);
+  
+  // Add Fund Modal State
+  const [showAddFundModal, setShowAddFundModal] = useState(false);
+  const [newFundAmount, setNewFundAmount] = useState("");
+  const [newFundType, setNewFundType] = useState<"deposit" | "withdrawal">("deposit");
+  const [newFundNotes, setNewFundNotes] = useState("");
+  const [fundLoading, setFundLoading] = useState(false);
+
+  const handleAddFundTransaction = async () => {
+    if (!currentUser || currentUser.role !== "admin") return;
+    const amount = parseFloat(newFundAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid amount.");
+      return;
+    }
+    if (!newFundNotes.trim()) {
+      alert("Please enter a description for the transaction.");
+      return;
+    }
+
+    const newTx: GeneralFundTransaction = {
+      id: "tx-" + Date.now(),
+      amount,
+      type: newFundType,
+      notes: newFundNotes.trim(),
+      date: new Date().toISOString(),
+      recordedBy: currentUser.uid
+    };
+
+    const nextTx = [newTx, ...generalFundTransactions];
+
+    if (currentUser.isOfflineMock) {
+      const stored = localStorage.getItem("axotic_mock_general_settings");
+      let parsed = stored ? JSON.parse(stored) : {};
+      parsed.generalFundTransactions = nextTx;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(parsed));
+      setNewFundAmount("");
+      setNewFundNotes("");
+      setShowAddFundModal(false);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      return;
+    }
+
+    setFundLoading(true);
+    try {
+      await updateDoc(doc(db, "settings", "general"), {
+        generalFundTransactions: nextTx
+      });
+      setNewFundAmount("");
+      setNewFundNotes("");
+      setShowAddFundModal(false);
+    } catch (err) {
+      try {
+        await setDoc(doc(db, "settings", "general"), { generalFundTransactions: nextTx }, { merge: true });
+        setNewFundAmount("");
+        setNewFundNotes("");
+        setShowAddFundModal(false);
+      } catch (innerErr) {
+        handleFirestoreError(innerErr, OperationType.WRITE, "settings/general");
+        alert("Failed to add transaction.");
+      }
+    } finally {
+      setFundLoading(false);
+    }
+  };
+
 
   // 1. Fetch live stockroom parameters
   useEffect(() => {
@@ -397,9 +466,56 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
   };
 
   // Stat computations
+  
+  const fundChartData = useMemo(() => {
+    if (!generalFundTransactions || generalFundTransactions.length === 0) return [];
+    
+    // Sort transactions by date ascending
+    const sorted = [...generalFundTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // First, find the starting balance before the 30-day window
+    let runningBalance = 0;
+    
+    for (const tx of sorted) {
+      if (new Date(tx.date).getTime() < thirtyDaysAgo.getTime()) {
+        runningBalance += (tx.type === "deposit" ? tx.amount : -tx.amount);
+      }
+    }
+    
+    // Generate an entry for each of the last 30 days
+    const data = [];
+    let currentDay = new Date(thirtyDaysAgo);
+    
+    while (currentDay <= now) {
+      const dayStart = new Date(currentDay);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(currentDay);
+      dayEnd.setHours(23, 59, 59, 999);
+      
+      const dayTx = sorted.filter(tx => {
+        const txDate = new Date(tx.date).getTime();
+        return txDate >= dayStart.getTime() && txDate <= dayEnd.getTime();
+      });
+      
+      const dayChange = dayTx.reduce((sum, tx) => sum + (tx.type === "deposit" ? tx.amount : -tx.amount), 0);
+      runningBalance += dayChange;
+      
+      data.push({
+        date: currentDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        balance: runningBalance,
+      });
+      
+      currentDay = new Date(currentDay.getTime() + 24 * 60 * 60 * 1000);
+    }
+    
+    return data;
+  }, [generalFundTransactions]);
   const ongoingProjects = projectsList.filter(p => p.status !== "Finished");
-  const totalSponsorFunds = projectsList.reduce((sum, p) => {
-    const fundsList = p.sponsorFundings || [];
+  const totalGeneralFundAllocations = projectsList.reduce((sum, p) => {
+    const fundsList = p.generalFundAllocations || [];
     return sum + fundsList.reduce((subSum, s) => subSum + s.amount, 0);
   }, 0);
   const totalBudgetLimit = projectsList.reduce((sum, p) => sum + (p.budget || 0), 0);
@@ -570,7 +686,12 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
       {/* 2. CORE STATS MULTI-CARD GRID */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metrics Card A: Ongoing Projects */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all"
+        >
           <div className="space-y-1 text-left">
             <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Ongoing Projects</span>
             <span className="text-2xl font-black font-mono text-slate-800 block">{ongoingProjects.length}</span>
@@ -581,17 +702,22 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           <div className="size-11 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0 shadow-3xs">
             <Compass className="size-5" />
           </div>
-        </div>
+        </motion.div>
 
-        {/* Metrics Card B: Total Sponsor Sponsorship */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all">
+        {/* Metrics Card B: Total General Fund Allocations */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all"
+        >
           <div className="space-y-1 text-left min-w-0 flex-1">
-            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Sponsor Funding</span>
+            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">General Fund Support</span>
             <span 
               className="text-2xl font-black font-mono text-emerald-700 block truncate"
-              title={`LKR ${totalSponsorFunds.toLocaleString('en-US')}`}
+              title={`LKR ${totalGeneralFundAllocations.toLocaleString('en-US')}`}
             >
-              LKR {formatShortLKR(totalSponsorFunds)}
+              LKR {formatShortLKR(totalGeneralFundAllocations)}
             </span>
             <span className="text-[9.5px] text-slate-450 flex items-center gap-1 hover:underline cursor-help select-none" title={`Total Budget limits across active builds: LKR ${totalBudgetLimit.toLocaleString('en-US')}`}>
               <Coins className="size-3 text-emerald-500 shrink-0" /> Offset on LKR {formatShortLKR(totalBudgetLimit)} cap
@@ -600,10 +726,15 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           <div className="size-11 rounded-xl bg-emerald-50/50 flex items-center justify-center text-emerald-600 shrink-0 shadow-3xs">
             <Briefcase className="size-5" />
           </div>
-        </div>
+        </motion.div>
 
         {/* Metrics Card C: Low-Stock Shortfalls */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all"
+        >
           <div className="space-y-1 text-left">
             <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Low Stock Alarms</span>
             {lowStockItems.length > 0 ? (
@@ -620,10 +751,15 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           <div className={`size-11 rounded-xl flex items-center justify-center shrink-0 shadow-3xs ${lowStockItems.length > 0 ? "bg-rose-50 text-rose-650" : "bg-slate-50 text-slate-500"}`}>
             <AlertTriangle className="size-5" />
           </div>
-        </div>
+        </motion.div>
 
         {/* Metrics Card D: Active Team Specialists */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-3xs hover:shadow-2xs transition-all"
+        >
           <div className="space-y-1 text-left">
             <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Roster Specialists</span>
             <span className="text-2xl font-black font-mono text-slate-805 block">{roster.length}</span>
@@ -634,7 +770,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           <div className="size-11 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600 shrink-0 shadow-3xs">
             <Users className="size-5" />
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* 3. CO-LAYOUT COLUMNS */}
@@ -751,25 +887,25 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
             )}
           </div>
 
-          {/* SPONSOR & GRANTS OVERVIEW ROLL */}
+          {/* GENERAL FUND ALLOCATIONS OVERVIEW */}
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
               <Briefcase className="size-4 text-emerald-600" />
-              Consolidated Sponsor Contributions Roll
+              Consolidated General Fund Allocations
             </h3>
             
             <div className="bg-white border border-slate-200 rounded-2xl p-4">
-              {projectsList.filter(p => p.sponsorFundings && p.sponsorFundings.length > 0).length === 0 ? (
+              {projectsList.filter(p => p.generalFundAllocations && p.generalFundAllocations.length > 0).length === 0 ? (
                 <div className="text-center py-6 text-slate-400 text-xs italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                  No active sponsor fundings logged on workspace project books. Define inbound grants under project spreadsheet sections to override costs.
+                  No active general fund allocations logged on workspace project books. Define inbound grants under project spreadsheet sections to override costs.
                 </div>
               ) : (
                 <div className="space-y-2.5">
                   <div className="text-[10px] text-slate-500 text-left border-b border-slate-100 pb-1.5 mb-1.5">
-                    Live list of scholarships, academic sponsorships, and department offsets.
+                    Live list of scholarships, academic allocationships, and department offsets.
                   </div>
                   {projectsList.map((p) => {
-                    const projectGrants = p.sponsorFundings || [];
+                    const projectGrants = p.generalFundAllocations || [];
                     if (projectGrants.length === 0) return null;
                     return (
                       <div key={p.id} className="p-3 bg-slate-50 hover:bg-slate-100/50 rounded-xl border border-slate-150 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left transition-colors">
@@ -780,8 +916,8 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
                           </div>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
                             {projectGrants.map((g) => (
-                              <span key={g.id} className="text-[10px] bg-white border border-slate-205 rounded px-2 py-0.5 text-slate-600" title={g.notes || "Sponsoring backing"}>
-                                🔬 <strong>{g.sponsorName}</strong>: LKR {g.amount.toFixed(0)} {g.notes && `(${g.notes})`}
+                              <span key={g.id} className="text-[10px] bg-white border border-slate-205 rounded px-2 py-0.5 text-slate-600" title={g.notes || "General Fund backing"}>
+                                🔬 <strong>{g.allocationName}</strong>: LKR {g.amount.toFixed(0)} {g.notes && `(${g.notes})`}
                               </span>
                             ))}
                           </div>
@@ -805,6 +941,72 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
         {/* RIGHT COLUMN: 2/5 WIDTH */}
         <div className="lg:col-span-2 space-y-6">
           
+          
+          {/* GENERAL FUND BALANCE TREND CHART */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
+                <TrendingUp className="size-4 text-emerald-600 animate-pulse" />
+                Treasury Balance (30 Days)
+              </h3>
+              {currentUser.role === "admin" && (
+                <button 
+                  onClick={() => setShowAddFundModal(true)}
+                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold uppercase transition-colors cursor-pointer"
+                >
+                  + Add Funds
+                </button>
+              )}
+            </div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all text-center flex flex-col justify-between min-h-[280px]">
+              {fundChartData.length === 0 ? (
+                <div className="my-auto py-8 px-4 flex flex-col items-center justify-center space-y-3">
+                  <div className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400">
+                    <TrendingUp className="size-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-slate-700">No Treasury Data</h4>
+                    <p className="text-[10.5px] text-slate-400 max-w-xs leading-relaxed">
+                      Transactions need to be logged to visualize the general fund trend.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={fundChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      dy={10}
+                      minTickGap={20}
+                    />
+                    <YAxis 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickFormatter={(value) => `${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                    />
+                    <ChartTooltip 
+                      cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', fontSize: '12px', fontWeight: 'bold' }}
+                      formatter={(value) => [`LKR ${Number(value).toLocaleString()}`, 'Balance']}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="balance" 
+                      stroke="#059669" 
+                      strokeWidth={3}
+                      dot={false}
+                      activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
           {/* VISUAL COMPONENT USAGE ANALYTICS CHART */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -1019,6 +1221,86 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
 
       </div>
 
+      {/* Add Funds Modal */}
+      {showAddFundModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col border border-slate-200">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <h3 className="font-display font-bold text-slate-800 text-sm">Add Treasury Funds</h3>
+              <button 
+                onClick={() => setShowAddFundModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Transaction Type</label>
+                <div className="flex rounded-lg overflow-hidden border border-slate-200 p-0.5 bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => setNewFundType("deposit")}
+                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-all ${
+                      newFundType === "deposit" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Deposit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewFundType("withdrawal")}
+                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-all ${
+                      newFundType === "withdrawal" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Withdrawal
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Amount (LKR)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 50000"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm outline-hidden font-medium"
+                  value={newFundAmount}
+                  onChange={(e) => setNewFundAmount(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. University Grant"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm outline-hidden font-medium"
+                  value={newFundNotes}
+                  onChange={(e) => setNewFundNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button
+                onClick={() => setShowAddFundModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddFundTransaction}
+                disabled={fundLoading}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                {fundLoading ? "Saving..." : "Record Transaction"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

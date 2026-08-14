@@ -44,7 +44,7 @@ import {
   ChevronDown,
   ChevronUp
 } from "lucide-react";
-import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, SponsorFunding, MemberContribution, PeerTransfer } from "../types";
+import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, GeneralFundAllocation, MemberContribution, PeerTransfer } from "../types";
 
 // Dynamic input preview formatter for high craftsmanship human error checks
 const formatInputPreview = (value: number): string => {
@@ -140,10 +140,10 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   const [newBItemQuantity, setNewBItemQuantity] = useState("1");
   const [newBItemPaidById, setNewBItemPaidById] = useState("");
 
-  // New sponsor funding scratch states
-  const [newSponsorName, setNewSponsorName] = useState("");
-  const [newSponsorAmount, setNewSponsorAmount] = useState("");
-  const [newSponsorNotes, setNewSponsorNotes] = useState("");
+  // New general fund scratch states
+  const [newAllocationName, setNewAllocationName] = useState("");
+  const [newAllocationAmount, setNewAllocationAmount] = useState("");
+  const [newAllocationNotes, setNewAllocationNotes] = useState("");
 
   // New member contributions scratch states
   const [newContribMemberId, setNewContribMemberId] = useState("");
@@ -781,7 +781,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       costSplitType: newCostSplitType,
       memberCostSplits: newMemberCostSplits,
       budgetItems: [],
-      sponsorFundings: [],
+      generalFundAllocations: [],
       memberContributions: [],
       peerTransfers: []
     };
@@ -1114,11 +1114,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
     }
   };
 
-  const handleUpdateSponsorFundings = async (updatedSponsors: SponsorFunding[]) => {
+  const handleUpdateGeneralFundAllocations = async (updatedAllocations: GeneralFundAllocation[]) => {
     if (!selectedProject) return;
 
     const payloadFields = {
-      sponsorFundings: updatedSponsors,
+      generalFundAllocations: updatedAllocations,
       updatedAt: new Date().toISOString()
     };
 
@@ -1657,8 +1657,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
               const budgetVal = selectedProject.budget || 0;
               const items = selectedProject.budgetItems || [];
               const costVal = items.reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
-              const sponsors = selectedProject.sponsorFundings || [];
-              const sponsorTotal = sponsors.reduce((sum, s) => sum + s.amount, 0);
+              const allocations = selectedProject.generalFundAllocations || [];
+              const generalFundAllocationsTotal = allocations.reduce((sum, s) => sum + s.amount, 0);
               
               const contributions = selectedProject.memberContributions || [];
               const contributionTotal = contributions.reduce((sum, c) => sum + c.amount, 0);
@@ -1669,7 +1669,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 .filter(c => c.type === "reimbursable")
                 .reduce((sum, c) => sum + c.amount, 0);
 
-              const netCostToSplit = Math.max(0, costVal + memberReimbursableTotal - sponsorTotal - memberDonationsTotal);
+              const generalFundTotal = items.filter(it => it.paidById === "general_fund").reduce((sum, it) => sum + (it.unitCost * it.quantity), 0);
+              const netCostToSplit = Math.max(0, costVal + memberReimbursableTotal - generalFundAllocationsTotal - memberDonationsTotal - generalFundTotal);
               
               const participants = Array.from(new Set([selectedProject.leaderId, ...(selectedProject.memberIds || [])])).filter(Boolean);
               const numParticipants = participants.length || 1;
@@ -1721,6 +1722,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
               });
 
               const getParticipantName = (uid: string) => {
+                if (uid === "general_fund") return "General Fund";
                 const u = roster.find(user => user.uid === uid);
                 if (u) return u.displayName;
                 if (uid === selectedProject.leaderId) return selectedProject.leaderName;
@@ -1732,6 +1734,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
               };
 
               const getParticipantRoleLabel = (uid: string) => {
+                if (uid === "general_fund") return "Team Fund";
                 if (uid === selectedProject.leaderId) return "Lead";
                 const u = roster.find(user => user.uid === uid);
                 if (u?.role === "admin") return "Admin";
@@ -1763,7 +1766,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 rows.push(["Metric", "Value (LKR)"]);
                 rows.push(["Total Project Budget", budgetVal.toFixed(2)]);
                 rows.push(["Total Cost Sum (Spreadsheet)", costVal.toFixed(2)]);
-                rows.push(["Sponsor Funding (Inbound)", sponsorTotal.toFixed(2)]);
+                rows.push(["General Fund Support (Inbound)", generalFundAllocationsTotal.toFixed(2)]);
                 rows.push(["Member Contributions Total", contributionTotal.toFixed(2)]);
                 rows.push(["  - Reimbursable Contributions", memberReimbursableTotal.toFixed(2)]);
                 rows.push(["  - Gift Donations", memberDonationsTotal.toFixed(2)]);
@@ -1788,11 +1791,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 rows.push([]);
                 
                 // Section 2: Sponsors
-                rows.push(["EXTERNAL TRUST SPONSORSHIPS"]);
-                rows.push(["Sponsor Name", "Purpose Notes", "Funding Amount (LKR)"]);
-                sponsors.forEach(s => {
+                rows.push(["GENERAL FUND ALLOCATIONS"]);
+                rows.push(["Allocation Name", "Purpose Notes", "Funding Amount (LKR)"]);
+                allocations.forEach(s => {
                   rows.push([
-                    s.sponsorName,
+                    s.allocationName,
                     s.notes || "",
                     s.amount.toFixed(2)
                   ]);
@@ -1980,12 +1983,12 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     </div>
                     
                     <div className="bg-emerald-50/20 p-4 rounded-xl border border-emerald-100/60 min-w-0 flex flex-col justify-end">
-                      <div className="text-[10px] text-emerald-605 font-bold uppercase tracking-widest truncate">Sponsor Funding (Inbound)</div>
+                      <div className="text-[10px] text-emerald-605 font-bold uppercase tracking-widest truncate">General Fund Support (Inbound)</div>
                       <div 
-                        className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-emerald-700 transition-all ${getDynamicFontSizeClass(sponsorTotal)}`}
-                        title={`Exact Sponsor fundings: LKR ${sponsorTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-emerald-700 transition-all ${getDynamicFontSizeClass(generalFundAllocationsTotal)}`}
+                        title={`Exact General Fund support: LKR ${generalFundAllocationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       >
-                        LKR {formatShortOption(sponsorTotal, sponsorTotal < 100_000)}
+                        LKR {formatShortOption(generalFundAllocationsTotal, generalFundAllocationsTotal < 100_000)}
                       </div>
                     </div>
                     
@@ -2139,6 +2142,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                   className="w-full bg-white border border-slate-200 focus:border-blue-500 hover:border-slate-350 rounded px-2 py-1.5 text-xs cursor-pointer text-slate-700 outline-hidden font-medium"
                                 >
                                   <option value="">Who paid?</option>
+                                  <option value="general_fund">General Fund</option>
                                   {participants.map(pId => (
                                     <option key={pId} value={pId}>{getParticipantName(pId)}</option>
                                   ))}
@@ -2192,34 +2196,34 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
                       <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider flex items-center gap-1.5 select-none">
                         <Briefcase className="size-4 text-indigo-600" />
-                        Sponsors & Offsetting Grants
+                        General Fund Allocations
                       </h4>
                       <p className="text-[10px] text-slate-450 italic">
-                        Document scholarships, academic grants, or external sponsorships that reduce out-of-pocket costs for members.
+                        Document global treasury allocations that reduce out-of-pocket costs that reduce out-of-pocket costs for members.
                       </p>
                     </div>
 
                     {/* Sponsor entries listing table */}
                     <div className="bg-slate-50 border border-slate-205 rounded-xl p-4 space-y-4">
-                      {sponsors.length === 0 ? (
+                      {allocations.length === 0 ? (
                         <div className="text-center py-6 text-slate-400 text-xs italic bg-white rounded-lg border border-slate-150">
-                          No external sponsor funding logged yet. Add sources below to offset member expense allocations!
+                          No general fund allocations logged yet. Add sources below to offset member expense allocations!
                         </div>
                       ) : (
                         <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto shadow-2xs">
                           <table className="w-full text-left border-collapse min-w-[500px] sm:min-w-0 text-xs">
                             <thead>
                               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[9px] tracking-wider select-none">
-                                <th className="p-2.5">Sponsor / Grant Entity</th>
+                                <th className="p-2.5">Allocation Source Entity</th>
                                 <th className="p-2.5">Target notes</th>
                                 <th className="p-2.5 text-right w-1/4">Amount (LKR)</th>
                                 <th className="p-2.5 text-center w-16">Remove</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-150">
-                              {sponsors.map((s, idx) => (
+                              {allocations.map((s, idx) => (
                                 <tr key={`${s.id}-${idx}`} className="hover:bg-slate-50/40">
-                                  <td className="p-2.5 font-bold text-slate-800">{s.sponsorName}</td>
+                                  <td className="p-2.5 font-bold text-slate-800">{s.allocationName}</td>
                                   <td className="p-2.5 text-slate-500 italic">{s.notes || "-"}</td>
                                   <td className="p-2.5 font-mono text-right font-black text-emerald-600">
                                     LKR {s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -2229,11 +2233,11 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          const nextSponsors = sponsors.filter(item => item.id !== s.id);
-                                          handleUpdateSponsorFundings(nextSponsors);
+                                          const nextAllocations = allocations.filter(item => item.id !== s.id);
+                                          handleUpdateGeneralFundAllocations(nextAllocations);
                                         }}
                                         className="p-1 text-slate-400 hover:text-red-500 rounded hover:bg-rose-50 transition-colors cursor-pointer"
-                                        title="Remove sponsor funding"
+                                        title="Remove general fund allocation"
                                       >
                                         <Trash2 className="size-3.5" />
                                       </button>
@@ -2248,19 +2252,19 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                         </div>
                       )}
 
-                      {/* Add Sponsorship inline controls */}
+                      {/* Add General Fund Allocation inline controls */}
                       {canModifyProject(selectedProject) && (
                         <div className="bg-white p-3.5 rounded-lg border border-slate-150 space-y-3">
                           <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-650 flex items-center gap-1">
-                            <Plus className="size-3.5 text-indigo-505" /> Add Inbound Sponsor Support Row
+                            <Plus className="size-3.5 text-indigo-505" /> Add Inbound General Fund Support Row
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
                             <div>
                               <input
                                 type="text"
-                                placeholder="Sponsor (e.g. AXOTIC Hub, Grant, Aerospace Club)"
-                                value={newSponsorName}
-                                onChange={(e) => setNewSponsorName(e.target.value)}
+                                placeholder="Allocation Name (e.g. AXOTIC Hub Grant)"
+                                value={newAllocationName}
+                                onChange={(e) => setNewAllocationName(e.target.value)}
                                 className="w-full bg-white border border-slate-205 focus:border-indigo-500 rounded px-2.5 py-1.5 text-xs outline-hidden shrink-0"
                               />
                             </div>
@@ -2271,8 +2275,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                 min="0"
                                 step="0.01"
                                 placeholder="Amount value"
-                                value={newSponsorAmount}
-                                onChange={(e) => setNewSponsorAmount(e.target.value)}
+                                value={newAllocationAmount}
+                                onChange={(e) => setNewAllocationAmount(e.target.value)}
                                 className="w-full bg-white border border-slate-205 focus:border-indigo-500 rounded pl-10 pr-2.5 py-1.5 text-xs text-right font-mono outline-hidden"
                               />
                             </div>
@@ -2280,8 +2284,8 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               <input
                                 type="text"
                                 placeholder="Purpose notes (e.g. PCB fabrication costs)"
-                                value={newSponsorNotes}
-                                onChange={(e) => setNewSponsorNotes(e.target.value)}
+                                value={newAllocationNotes}
+                                onChange={(e) => setNewAllocationNotes(e.target.value)}
                                 className="w-full bg-white border border-slate-205 focus:border-indigo-500 rounded px-2.5 py-1.5 text-xs outline-hidden"
                               />
                             </div>
@@ -2290,35 +2294,35 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                             <button
                               type="button"
                               onClick={() => {
-                                if (!newSponsorName.trim()) {
-                                  alert("Please enter the Sponsor Name.");
+                                if (!newAllocationName.trim()) {
+                                  alert("Please enter the Allocation Name.");
                                   return;
                                 }
-                                const amt = parseFloat(newSponsorAmount);
+                                const amt = parseFloat(newAllocationAmount);
                                 if (isNaN(amt) || amt <= 0) {
                                   alert("Please enter a valid funding amount greater than 0.");
                                   return;
                                 }
-                                const nextSponsors = [
-                                  ...sponsors,
+                                const nextAllocations = [
+                                  ...allocations,
                                   {
-                                    id: `sponsor-${Date.now()}`,
-                                    sponsorName: newSponsorName.trim(),
+                                    id: `gf-alloc-${Date.now()}`,
+                                    allocationName: newAllocationName.trim(),
                                     amount: amt,
-                                    notes: newSponsorNotes.trim(),
+                                    notes: newAllocationNotes.trim(),
                                     createdAt: new Date().toISOString()
                                   }
                                 ];
-                                handleUpdateSponsorFundings(nextSponsors);
+                                handleUpdateGeneralFundAllocations(nextAllocations);
                                 
                                 // Reset
-                                setNewSponsorName("");
-                                setNewSponsorAmount("");
-                                setNewSponsorNotes("");
+                                setNewAllocationName("");
+                                setNewAllocationAmount("");
+                                setNewAllocationNotes("");
                               }}
                               className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] uppercase font-bold rounded-md cursor-pointer hover:shadow-xs transition-all active:scale-98"
                             >
-                              Add Sponsorship Record
+                              Add General Fund Allocation
                             </button>
                           </div>
                         </div>
@@ -2713,10 +2717,10 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                         Allocated Funding, Imbalances and Reimbursement Splits
                       </h4>
                       <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-                        {(sponsorTotal > 0 || memberDonationsTotal > 0) && (
+                        {(generalFundAllocationsTotal > 0 || memberDonationsTotal > 0) && (
                           <span className="text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-250/20 px-2 py-0.5 rounded text-emerald-700 select-none">
                             Net cost split: LKR {netCostToSplit.toFixed(2)} 
-                            {sponsorTotal > 0 && ` (Sponsor Support: LKR ${sponsorTotal.toFixed(2)})`}
+                            {generalFundAllocationsTotal > 0 && ` (General Fund Support: LKR ${generalFundAllocationsTotal.toFixed(2)})`}
                             {memberDonationsTotal > 0 && ` (Member Donations: LKR ${memberDonationsTotal.toFixed(2)})`}
                           </span>
                         )}
@@ -2888,9 +2892,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               </span>
                             </div>
                             <div className="p-3 bg-slate-50 rounded-lg border border-slate-155 text-left">
-                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">Sponsor Offsets</span>
+                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">General Fund Offsets</span>
                               <span className="font-mono text-sm sm:text-base font-bold text-slate-900">
-                                LKR {sponsorTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                LKR {generalFundAllocationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                             <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-155 text-left">
@@ -2945,24 +2949,24 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
                               <div className="space-y-2">
                                 <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
-                                  2. Sponsors & Grants
+                                  2. General Fund Allocations
                                 </h3>
-                                {sponsors.length === 0 ? (
-                                  <p className="text-xs text-slate-400 italic">No external sponsor funding logged.</p>
+                                {allocations.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No general fund allocations logged.</p>
                                 ) : (
                                   <div className="overflow-x-auto border border-slate-200 rounded-lg">
                                     <table className="w-full text-[11px] text-left border-collapse min-w-[450px]">
                                     <thead>
                                       <tr className="bg-slate-55/60 border-b border-slate-300 text-slate-650 font-bold uppercase text-[9px]">
-                                        <th className="p-2 border-r border-slate-200">Sponsor Name</th>
+                                        <th className="p-2 border-r border-slate-200">Allocation Name</th>
                                         <th className="p-2 border-r border-slate-200">Notes</th>
                                         <th className="p-2 text-right">Amount (LKR)</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-150">
-                                      {sponsors.map((s, idx) => (
+                                      {allocations.map((s, idx) => (
                                         <tr key={`${s.id}-${idx}`}>
-                                          <td className="p-2 border-r border-slate-150 font-bold">{s.sponsorName}</td>
+                                          <td className="p-2 border-r border-slate-150 font-bold">{s.allocationName}</td>
                                           <td className="p-2 border-r border-slate-150 text-slate-500 italic">{s.notes || "-"}</td>
                                           <td className="p-2 text-right font-mono font-bold text-emerald-600">
                                             {s.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

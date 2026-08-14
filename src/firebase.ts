@@ -1,12 +1,13 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, doc, getDocFromServer, addDoc, collection } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, getDocFromServer, addDoc, collection, setLogLevel } from "firebase/firestore";
+setLogLevel("silent");
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
 export const db = (firebaseConfig as any).firestoreDatabaseId
-  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
-  : getFirestore(app);
+  ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, (firebaseConfig as any).firestoreDatabaseId)
+  : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   
 export const auth = getAuth();
 export const googleProvider = new GoogleAuthProvider(); // Added the provider here
