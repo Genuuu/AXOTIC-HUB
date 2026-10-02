@@ -12,7 +12,7 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
     if (isOfflineMock) {
       const storedLogo = localStorage.getItem("axotic_logo_url");
       const storedName = localStorage.getItem("axotic_workspace_name");
-      if (storedLogo) setLogoUrl(storedLogo);
+      if (storedLogo) setLogoUrl(storedLogo === "/AXOTIC Logo-1.png" ? "/logo.png" : storedLogo);
       if (storedName) setWorkspaceName(storedName);
       const storedGen = localStorage.getItem("axotic_mock_general_settings");
       if (storedGen) {
@@ -25,7 +25,7 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
       const handleUpdate = () => {
         const _logo = localStorage.getItem("axotic_logo_url");
         const _name = localStorage.getItem("axotic_workspace_name");
-        if (_logo) setLogoUrl(_logo);
+        if (_logo) setLogoUrl(_logo === "/AXOTIC Logo-1.png" ? "/logo.png" : _logo);
         if (_name) setWorkspaceName(_name);
         const _storedGen = localStorage.getItem("axotic_mock_general_settings");
         if (_storedGen) {
@@ -41,7 +41,7 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
       const unsub = onSnapshot(doc(db, "settings", "general"), (d) => {
         if (d.exists()) {
           const data = d.data();
-          if (data.logoUrl) setLogoUrl(data.logoUrl);
+          if (data.logoUrl) setLogoUrl(data.logoUrl === "/AXOTIC Logo-1.png" ? "/logo.png" : data.logoUrl);
           if (data.workspaceName) setWorkspaceName(data.workspaceName);
           if (data.generalFundTransactions) setGeneralFundTransactions(data.generalFundTransactions);
         }

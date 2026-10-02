@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   db, 
   handleFirestoreError, 
-  OperationType,
+  OperationType, createAdminLog,
   createGlobalNotification
 } from "../firebase";
 import { 
@@ -814,6 +814,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       createGlobalNotification("project_created", `New project spawned: ${newProj.title}`, newProjId, currentUser);
 
       setShowCreateModal(false);
+      createAdminLog("PROJECT_CREATED", `Created new project: "${newTitle.trim()}".`, currentUser);
       clearCreateForm();
       setLoading(false);
       return;
@@ -958,12 +959,14 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       localStorage.setItem(logsKey, JSON.stringify([newLogWithId, ...currentLogs]));
       window.dispatchEvent(new Event("axotic_db_update"));
       setNewLogContent("");
+      createAdminLog("PROJECT_LOG_ADDED", `Added log to project: ${selectedProject.title} in Sandbox.`, currentUser);
       return;
     }
 
     try {
       await addDoc(collection(db, "projects", selectedProject.id, "logs"), newLog);
       setNewLogContent("");
+      createAdminLog("PROJECT_LOG_ADDED", `Added log to project: ${selectedProject.title}.`, currentUser);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `projects/${selectedProject.id}/logs`);
     }
@@ -990,6 +993,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         if (selectedProject?.id === projId) {
           setSelectedProject(null);
         }
+        createAdminLog("PROJECT_DELETED", `Deleted project ID: ${projId} in Sandbox.`, currentUser);
       }
       return;
     }
@@ -999,6 +1003,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       if (selectedProject?.id === projId) {
         setSelectedProject(null);
       }
+      createAdminLog("PROJECT_DELETED", `Deleted project ID: ${projId}.`, currentUser);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `projects/${projId}`);
     }

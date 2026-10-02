@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, createAdminLog } from "../firebase";
 import { 
   collection, 
   onSnapshot, 
@@ -365,6 +365,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
       setNewLoc("");
       setNewSpec("");
       triggerFeedback("New hardware component successfully registered in Sandbox.");
+      createAdminLog("INVENTORY_ADDED", `Registered new item: "${trimmedName}" in Sandbox.`, currentUser);
       setLoading(false);
       return;
     }
@@ -380,6 +381,7 @@ export default function InventoryManager({ currentUser, projects }: InventoryMan
       setNewLoc("");
       setNewSpec("");
       triggerFeedback("New hardware component successfully registered.");
+      createAdminLog("INVENTORY_ADDED", `Registered new item: "${trimmedName}".`, currentUser);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, "inventory");
     } finally {

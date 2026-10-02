@@ -49,7 +49,11 @@ import {
   Megaphone,
   Link,
   Banknote,
-  Layers
+  Layers,
+  PackageOpen,
+  Lightbulb,
+  Compass,
+  Trophy,
 } from "lucide-react";
 import { UserProfile, UserRole, AdminLog, GeneralFundTransaction } from "../types";
 import AddMember from "./AddMember";
@@ -439,7 +443,7 @@ export default function AdminSettings({
       const period = localStorage.getItem("axotic_return_period");
       const pub = localStorage.getItem("axotic_public_onboarding");
       if (name) setWorkspaceName(name);
-      if (logo) setLogoUrl(logo);
+      if (logo) setLogoUrl(logo === "/AXOTIC Logo-1.png" ? "/logo.png" : logo);
       if (period) setReturnPeriod(period);
       if (pub) setAllowPublicVisibility(pub === "true");
       const storedGen = localStorage.getItem("axotic_mock_general_settings");
@@ -454,7 +458,7 @@ export default function AdminSettings({
         if (d.exists()) {
           const data = d.data();
           if (data.workspaceName) setWorkspaceName(data.workspaceName);
-          if (data.logoUrl) setLogoUrl(data.logoUrl);
+          if (data.logoUrl) setLogoUrl(data.logoUrl === "/AXOTIC Logo-1.png" ? "/logo.png" : data.logoUrl);
           if (data.returnPeriod) setReturnPeriod(data.returnPeriod);
           if (data.generalFundTransactions) setGeneralFundTransactions(data.generalFundTransactions);
           if (data.allowPublicVisibility !== undefined) setAllowPublicVisibility(data.allowPublicVisibility);
@@ -1453,6 +1457,29 @@ export default function AdminSettings({
                 <option value="MEMBER_ONBOARDED">Onboarded Members</option>
                 <option value="USER_OVERRIDE">Role Overrides</option>
                 <option value="USER_DISMISSED">Roster Dismissals</option>
+                
+                {/* Inventory & Logistics */}
+                <option value="INVENTORY_ADDED">Parts Registered</option>
+                <option value="INVENTORY_UPDATED">Parts Updated</option>
+                <option value="INVENTORY_DELETED">Parts Deleted</option>
+                <option value="HARDWARE_ALLOCATED">Hardware Allocated</option>
+                <option value="HARDWARE_SALVAGED">Hardware Salvaged</option>
+                
+                {/* Projects & Build Logs */}
+                <option value="PROJECT_CREATED">Projects Initiated</option>
+                <option value="PROJECT_DELETED">Projects Archived</option>
+                <option value="PROJECT_LOG_ADDED">Project Logs Added</option>
+                
+                {/* Ideas & Brainstorming */}
+                <option value="IDEA_CREATED">Ideas Pitched</option>
+                <option value="IDEA_UPDATED">Idea Status Updates</option>
+                <option value="IDEA_DELETED">Ideas Discarded</option>
+                
+                {/* Competitions */}
+                <option value="competition_added">Competitions Created</option>
+                <option value="competition_updated">Competitions Updated</option>
+
+                {/* System Classifications */}
                 <option value="CATEGORY_ADDED">Categories Registered</option>
                 <option value="CATEGORY_DELETED">Categories Wiped</option>
                 <option value="WORKSPACE_CONFIG">General Config Updates</option>
@@ -1512,6 +1539,38 @@ export default function AdminSettings({
                   actionColor = "bg-red-50 text-red-700 border-red-100";
                   actionBadge = "Taxonomy Deleted";
                   actionIcon = <FileCode className="size-4" />;
+                } else if (log.action === "INVENTORY_ADDED" || log.action === "INVENTORY_UPDATED") {
+                  actionColor = "bg-teal-50 text-teal-700 border-teal-100";
+                  actionBadge = log.action === "INVENTORY_ADDED" ? "Parts Registry" : "Parts Updated";
+                  actionIcon = <Layers className="size-4" />;
+                } else if (log.action === "INVENTORY_DELETED") {
+                  actionColor = "bg-rose-50 text-rose-700 border-rose-100";
+                  actionBadge = "Parts Deleted";
+                  actionIcon = <Trash2 className="size-4" />;
+                } else if (log.action === "HARDWARE_ALLOCATED" || log.action === "HARDWARE_SALVAGED") {
+                  actionColor = "bg-cyan-50 text-cyan-700 border-cyan-100";
+                  actionBadge = log.action === "HARDWARE_ALLOCATED" ? "Checkout" : "Salvaged";
+                  actionIcon = <PackageOpen className="size-4" />;
+                } else if (log.action === "PROJECT_CREATED" || log.action === "PROJECT_LOG_ADDED") {
+                  actionColor = "bg-blue-50 text-blue-700 border-blue-100";
+                  actionBadge = log.action === "PROJECT_CREATED" ? "Project Init" : "Log Entry";
+                  actionIcon = <Compass className="size-4" />;
+                } else if (log.action === "PROJECT_DELETED") {
+                  actionColor = "bg-rose-50 text-rose-700 border-rose-100";
+                  actionBadge = "Project Deleted";
+                  actionIcon = <Trash2 className="size-4" />;
+                } else if (log.action === "IDEA_CREATED" || log.action === "IDEA_UPDATED") {
+                  actionColor = "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100";
+                  actionBadge = log.action === "IDEA_CREATED" ? "Idea Pitched" : "Idea Updated";
+                  actionIcon = <Lightbulb className="size-4" />;
+                } else if (log.action === "IDEA_DELETED") {
+                  actionColor = "bg-rose-50 text-rose-700 border-rose-100";
+                  actionBadge = "Idea Deleted";
+                  actionIcon = <Trash2 className="size-4" />;
+                } else if (log.action === "competition_added" || log.action === "competition_updated") {
+                  actionColor = "bg-orange-50 text-orange-700 border-orange-100";
+                  actionBadge = "Competition";
+                  actionIcon = <Trophy className="size-4" />;
                 } else if (log.action === "WORKSPACE_CONFIG") {
                   actionColor = "bg-indigo-50 text-indigo-700 border-indigo-100";
                   actionBadge = "Config Calibration";
