@@ -52,7 +52,6 @@ import AdminSettings from "./components/AdminSettings";
 import IdeasBoard from "./components/IdeasBoard";
 import CompetitionsHub from "./components/CompetitionsHub";
 import { TreasuryHub } from "./components/TreasuryHub";
-import GeminiChatAssistant from "./components/GeminiChatAssistant";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -150,6 +149,23 @@ export default function App() {
   // UI Control states
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
+
+  // Global Keyboard Shortcut Listener for Quick-Switching (Ctrl+K or Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (currentUser) {
+          setIsPublicView(prev => !prev);
+        } else {
+          setIsAuthModalOpen(prev => !prev);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentUser]);
 
   // User Profile Edit States
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
@@ -762,11 +778,11 @@ export default function App() {
   }).length;
 
   return (
-    <div className={`${currentUser ? "h-[100dvh] overflow-hidden" : "min-h-screen"} bg-[#f8fafc] dark:bg-[#070b14] text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200 antialiased selection:bg-blue-500 selection:text-white relative`}>
+    <div className={`${currentUser && !isPublicView ? "h-[100dvh] overflow-hidden" : "min-h-screen overflow-y-auto"} bg-[#f8fafc] dark:bg-[#070b14] text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200 antialiased selection:bg-blue-500 selection:text-white relative`}>
       
       {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out OR viewing public mode) */}
       {!currentUser || isPublicView ? (
-        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative min-h-screen">
+        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative min-h-screen overflow-y-auto w-full">
           <PublicLanding 
             onOpenLogin={() => setIsAuthModalOpen(true)} 
             currentUser={currentUser} 
@@ -1895,8 +1911,41 @@ export default function App() {
         </div>
       )}
 
-      {/* Persistent Chat Assistant for Logged In Users */}
-      {currentUser && <GeminiChatAssistant />}
+      {/* Quick-Switch Floating Action Button (FAB) */}
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => {
+            if (currentUser) {
+              setIsPublicView(!isPublicView);
+            } else {
+              setIsAuthModalOpen(true);
+            }
+          }}
+          className="group px-4 py-3 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-extrabold text-xs rounded-2xl shadow-2xl hover:shadow-blue-500/30 transition-all duration-300 flex items-center gap-2.5 cursor-pointer border border-slate-700/80 dark:border-blue-400/40 active:scale-95"
+          title="Quick-Switch Viewport (Ctrl + K)"
+        >
+          <div className="size-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          {isPublicView || !currentUser ? (
+            <>
+              <Database className="size-4 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="font-mono uppercase tracking-wider text-[11px] hidden sm:inline">
+                {currentUser ? "Secured Database" : "Member Login"}
+              </span>
+            </>
+          ) : (
+            <>
+              <Globe className="size-4 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="font-mono uppercase tracking-wider text-[11px] hidden sm:inline">
+                Public Homepage
+              </span>
+            </>
+          )}
+          <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 dark:bg-blue-800 text-slate-300 dark:text-blue-100 rounded border border-slate-700 dark:border-blue-700 font-bold ml-1">
+            Ctrl+K
+          </kbd>
+        </button>
+      </div>
     </div>
   );
 }

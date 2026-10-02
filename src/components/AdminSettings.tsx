@@ -67,6 +67,37 @@ import TagInput from "./TagInput";
 import { defaultPublicLandingData, PublicLandingData, SubTeam, BuildSpec, TrackRecord, Achievement } from "./defaultPublicLandingData";
 import { TreasuryHub } from "./TreasuryHub";
 
+export function parseBuildImages(rawUrl: string | undefined): string[] {
+  if (!rawUrl) return [];
+  if (rawUrl.includes("|||")) {
+    return rawUrl.split("|||").map(s => s.trim()).filter(Boolean);
+  }
+  if (rawUrl.includes("data:image/")) {
+    const parts = rawUrl.split(',').map(s => s.trim()).filter(Boolean);
+    const result: string[] = [];
+    let currentDataUrl = "";
+    for (const part of parts) {
+      if (part.startsWith("data:image/")) {
+        if (currentDataUrl) result.push(currentDataUrl);
+        currentDataUrl = part;
+      } else if (currentDataUrl) {
+        currentDataUrl += "," + part;
+        result.push(currentDataUrl);
+        currentDataUrl = "";
+      } else if (part.startsWith("http://") || part.startsWith("https://")) {
+        result.push(part);
+      }
+    }
+    if (currentDataUrl) result.push(currentDataUrl);
+    return result.length > 0 ? result : [rawUrl];
+  }
+  return rawUrl.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+export function joinBuildImages(urls: string[]): string {
+  return urls.map(s => s.trim()).filter(Boolean).join(' ||| ');
+}
+
 interface AdminSettingsProps {
   currentUser: UserProfile;
   isDark?: boolean;
@@ -649,7 +680,7 @@ export default function AdminSettings({
       const img = new window.Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_SIZE = 1200;
+        const MAX_SIZE = 800;
         let width = img.width;
         let height = img.height;
 
@@ -671,7 +702,7 @@ export default function AdminSettings({
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
           
           if (publicPageData) {
             const list = [...(publicPageData.achievements || [])];
@@ -700,7 +731,7 @@ export default function AdminSettings({
       const img = new window.Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_SIZE = 1200;
+        const MAX_SIZE = 800;
         let width = img.width;
         let height = img.height;
 
@@ -722,13 +753,13 @@ export default function AdminSettings({
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
           
           if (publicPageData) {
             const list = [...publicPageData.buildSpecs];
-            const currentUrls = list[buildIndex].imageUrl ? list[buildIndex].imageUrl.split(',').map(s => s.trim()).filter(Boolean) : [];
+            const currentUrls = parseBuildImages(list[buildIndex].imageUrl);
             currentUrls.push(dataUrl);
-            list[buildIndex] = { ...list[buildIndex], imageUrl: currentUrls.join(', ') };
+            list[buildIndex] = { ...list[buildIndex], imageUrl: joinBuildImages(currentUrls) };
             setPublicPageData({ ...publicPageData, buildSpecs: list });
           }
         }
@@ -3606,7 +3637,7 @@ export default function AdminSettings({
                           {/* Multi-Image Manager per Build */}
                           <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
                             {(() => {
-                              const buildImages = build.imageUrl ? build.imageUrl.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              const buildImages = parseBuildImages(build.imageUrl);
                               return (
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between">
@@ -3639,9 +3670,9 @@ export default function AdminSettings({
                                           const val = input.value.trim();
                                           if (val) {
                                             const updated = [...publicPageData.buildSpecs];
-                                            const current = updated[idx].imageUrl ? updated[idx].imageUrl!.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                            const current = parseBuildImages(updated[idx].imageUrl);
                                             current.push(val);
-                                            updated[idx] = { ...updated[idx], imageUrl: current.join(', ') };
+                                            updated[idx] = { ...updated[idx], imageUrl: joinBuildImages(current) };
                                             setPublicPageData({ ...publicPageData, buildSpecs: updated });
                                             input.value = "";
                                           }
@@ -3656,9 +3687,9 @@ export default function AdminSettings({
                                         if (input && input.value.trim()) {
                                           const val = input.value.trim();
                                           const updated = [...publicPageData.buildSpecs];
-                                          const current = updated[idx].imageUrl ? updated[idx].imageUrl!.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                          const current = parseBuildImages(updated[idx].imageUrl);
                                           current.push(val);
-                                          updated[idx] = { ...updated[idx], imageUrl: current.join(', ') };
+                                          updated[idx] = { ...updated[idx], imageUrl: joinBuildImages(current) };
                                           setPublicPageData({ ...publicPageData, buildSpecs: updated });
                                           input.value = "";
                                         }
@@ -3685,9 +3716,9 @@ export default function AdminSettings({
                                               type="button"
                                               onClick={() => {
                                                 const updated = [...publicPageData.buildSpecs];
-                                                const current = updated[idx].imageUrl ? updated[idx].imageUrl!.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                                const current = parseBuildImages(updated[idx].imageUrl);
                                                 const filtered = current.filter((_, i) => i !== imgIdx);
-                                                updated[idx] = { ...updated[idx], imageUrl: filtered.join(', ') };
+                                                updated[idx] = { ...updated[idx], imageUrl: joinBuildImages(filtered) };
                                                 setPublicPageData({ ...publicPageData, buildSpecs: updated });
                                               }}
                                               className="p-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"

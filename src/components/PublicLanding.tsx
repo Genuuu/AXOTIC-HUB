@@ -62,8 +62,35 @@ const staggerContainer = {
 };
 
 
+export function parseBuildImages(rawUrl: string | undefined): string[] {
+  if (!rawUrl) return [];
+  if (rawUrl.includes("|||")) {
+    return rawUrl.split("|||").map(s => s.trim()).filter(Boolean);
+  }
+  if (rawUrl.includes("data:image/")) {
+    const parts = rawUrl.split(',').map(s => s.trim()).filter(Boolean);
+    const result: string[] = [];
+    let currentDataUrl = "";
+    for (const part of parts) {
+      if (part.startsWith("data:image/")) {
+        if (currentDataUrl) result.push(currentDataUrl);
+        currentDataUrl = part;
+      } else if (currentDataUrl) {
+        currentDataUrl += "," + part;
+        result.push(currentDataUrl);
+        currentDataUrl = "";
+      } else if (part.startsWith("http://") || part.startsWith("https://")) {
+        result.push(part);
+      }
+    }
+    if (currentDataUrl) result.push(currentDataUrl);
+    return result.length > 0 ? result : [rawUrl];
+  }
+  return rawUrl.split(',').map(s => s.trim()).filter(Boolean);
+}
+
 const BuildCard = ({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
-  const images = spec.imageUrl ? spec.imageUrl.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [];
+  const images = parseBuildImages(spec.imageUrl);
   const displayImages = images.length > 0 ? images : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`];
   
   const [currentIdx, setCurrentIdx] = React.useState(0);
@@ -399,7 +426,21 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
   const [lightboxImageIndex, setLightboxImageIndex] = useState<{idx: number, imgIdx: number} | null>(null);
   const [selectedAchievement, setSelectedAchievement] = useState<Achievement | null>(null);
   const [activeSection, setActiveSection] = useState<string>("intro-section");
-  const [landingData, setLandingData] = useState<PublicLandingData>(defaultPublicLandingData);
+  const [landingData, setLandingData] = useState<PublicLandingData>(() => {
+    try {
+      const local = localStorage.getItem("axotic_public_landing_config");
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (parsed && typeof parsed === "object") {
+          return {
+            ...defaultPublicLandingData,
+            ...parsed
+          };
+        }
+      }
+    } catch (_) {}
+    return defaultPublicLandingData;
+  });
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
   const { logoUrl: remoteLogoUrl } = useWorkspaceSettings();
@@ -414,6 +455,8 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     }
   }, [landingData.galleryPhotos]);
 
+  const [isSyncingData, setIsSyncingData] = useState(true);
+
   useEffect(() => {
     // 1. Try to fetch custom settings from localStorage if cached in sandbox mode
     const local = localStorage.getItem("axotic_public_landing_config");
@@ -426,6 +469,10 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
       } catch (_) {}
     }
 
+    const timer = setTimeout(() => {
+      setIsSyncingData(false);
+    }, 450);
+
     // Tab-level communication for instant preview update
     const handleStorageChange = () => {
       const updated = localStorage.getItem("axotic_public_landing_config");
@@ -437,6 +484,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
           });
         } catch (_) {}
       }
+      setIsSyncingData(false);
     };
     window.addEventListener("axotic_db_update", handleStorageChange);
 
@@ -455,12 +503,14 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
           showAchievements: d.showAchievements !== undefined ? d.showAchievements : true,
         } as PublicLandingData);
       }
+      setIsSyncingData(false);
     }, (err) => {
       console.warn("Could not load public page configurations from Firestore securely.", err.message);
-      handleFirestoreError(err, OperationType.GET, "landing/public");
+      setIsSyncingData(false);
     });
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("axotic_db_update", handleStorageChange);
       unsub();
     };
@@ -613,24 +663,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_85%_65%_at_50%_25%,transparent_35%,#f8fafc_100%)] dark:bg-[radial-gradient(ellipse_85%_65%_at_50%_25%,transparent_25%,#070b14_100%)]" />
       </div>
       
-      {/* Sticky Logged In Switcher Bar */}
-      {currentUser && onSwitchToDatabase && (
-        <div className="w-full z-50 bg-slate-950/95 border-b border-slate-800 text-white px-4 sm:px-8 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xl animate-fade-in font-sans">
-          <div className="flex items-center gap-2.5 text-xs font-medium font-mono">
-            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-slate-300">
-              Viewing Public Homepage as <strong className="text-white">{currentUser.displayName}</strong> ({currentUser.customRoleName || currentUser.role})
-            </span>
-          </div>
-          <button
-            onClick={onSwitchToDatabase}
-            className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer uppercase tracking-wider font-mono border border-blue-400/30 shrink-0"
-          >
-            <Database className="size-3.5" />
-            <span>Switch to Secured Database</span>
-          </button>
-        </div>
-      )}
+
 
       {/* Main Header / Sticky Floating Navigation Bar */}
       <motion.header 
@@ -652,21 +685,13 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
             />
           </div>
 
-          {/* Mobile Login / Database Toggle Button */}
+          {/* Mobile Member Login Button */}
           <div className="sm:hidden">
             <button
               onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
-              className="px-3 py-1.5 bg-blue-600 dark:bg-blue-500 text-white rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs uppercase cursor-pointer"
+              className="px-3 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs uppercase cursor-pointer"
             >
-              {currentUser ? (
-                <>
-                  <Database className="size-3" /> DATABASE
-                </>
-              ) : (
-                <>
-                  <Lock className="size-3" /> LOGIN
-                </>
-              )}
+              <Lock className="size-3" /> LOGIN
             </button>
           </div>
         </div>
@@ -721,7 +746,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
           })}
         </nav>
 
-        {/* Secure login gateway / Database button (Desktop) */}
+        {/* Secure member login gateway button (Desktop) */}
         <motion.button
           id="top-nav-portal-btn"
           onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
@@ -731,17 +756,8 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
         >
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           <span className="relative flex items-center gap-2 group-hover:text-white transition-colors duration-300">
-            {currentUser ? (
-              <>
-                <Database className="size-3.5" /> 
-                <span>SECURED DATABASE</span>
-              </>
-            ) : (
-              <>
-                <Lock className="size-3.5" /> 
-                <span>SECURE GATEWAY</span>
-              </>
-            )}
+            <Lock className="size-3.5" /> 
+            <span>{currentUser ? "MEMBER PORTAL" : "SECURE GATEWAY"}</span>
           </span>
         </motion.button>
       </motion.header>
@@ -922,7 +938,25 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
           {/* Grid of Images / Interactive Build Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {landingData.buildSpecs && landingData.buildSpecs.length > 0 ? (
+            {isSyncingData ? (
+              [1, 2].map(i => (
+                <div key={`build-skel-${i}`} className="bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-5 space-y-4 animate-pulse shadow-xs">
+                  <div className="aspect-[16/10] bg-slate-200 dark:bg-slate-800 rounded-2xl w-full" />
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-1/2" />
+                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-full w-16" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-full" />
+                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-3/4" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-20" />
+                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-20" />
+                  </div>
+                </div>
+              ))
+            ) : landingData.buildSpecs && landingData.buildSpecs.length > 0 ? (
               landingData.buildSpecs.map((spec, idx) => (
                 <BuildCard 
                   key={`${spec.id || 'build'}-${idx}`} 
@@ -1082,7 +1116,20 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {landingData.achievements.map((ach, idx) => {
+              {isSyncingData ? (
+                [1, 2, 3].map(i => (
+                  <div key={`ach-skel-${i}`} className="bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-6 space-y-4 animate-pulse shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="size-11 bg-slate-200 dark:bg-slate-800 rounded-2xl" />
+                      <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-16" />
+                    </div>
+                    <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
+                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-full" />
+                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-2/3" />
+                  </div>
+                ))
+              ) : (
+                landingData.achievements.map((ach, idx) => {
                 const awardLower = (ach.award || "").toLowerCase();
                 const isGold = ach.badgeType === "gold" || awardLower.includes("1st") || awardLower.includes("gold") || awardLower.includes("champion");
                 const isSilver = ach.badgeType === "silver" || awardLower.includes("2nd") || awardLower.includes("silver") || awardLower.includes("runner");
@@ -1193,7 +1240,8 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
                     </div>
                   </motion.div>
                 );
-              })}
+              })
+              )}
             </div>
           </motion.section>
         )}
