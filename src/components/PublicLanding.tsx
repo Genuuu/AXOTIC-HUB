@@ -517,6 +517,8 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
   }, []);
 
   // Smooth throttled scroll spy with RAF to avoid render churn on scroll
+  const [isScrolled, setIsScrolled] = useState(false);
+
   useEffect(() => {
     const sectionIds = [
       'intro-section',
@@ -534,15 +536,21 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const scrollPosition = window.scrollY + 180;
+        const rawScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+        setIsScrolled(rawScroll > 25);
+
         let matched = 'intro-section';
         for (let i = sectionIds.length - 1; i >= 0; i--) {
           const el = document.getElementById(sectionIds[i]);
-          if (el && scrollPosition >= el.offsetTop) {
-            matched = sectionIds[i];
-            break;
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top <= 260) {
+              matched = sectionIds[i];
+              break;
+            }
           }
         }
+
         if (matched !== currentActive) {
           currentActive = matched;
           setActiveSection(matched);
@@ -551,9 +559,11 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
+    document.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
     return () => {
       window.removeEventListener("scroll", handleScroll);
+      document.removeEventListener("scroll", handleScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [landingData]);
@@ -569,7 +579,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
   return (
     <div 
        id="public-landing-container" 
-       className="min-h-screen bg-[#f8fafc] dark:bg-[#070b14] text-[#0f2e46] dark:text-slate-100 flex flex-col items-center pt-2 sm:pt-4 md:pt-6 px-3 sm:px-8 md:px-12 pb-12 relative font-sans antialiased selection:bg-blue-500 selection:text-white"
+       className="min-h-screen bg-[#f8fafc] dark:bg-[#070b14] text-[#0f2e46] dark:text-slate-100 flex flex-col items-center pt-20 sm:pt-24 md:pt-28 px-3 sm:px-8 md:px-12 pb-12 relative font-sans antialiased selection:bg-blue-500 selection:text-white"
     >
       {/* Scroll Progress Bar */}
       <motion.div 
@@ -585,24 +595,33 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
         <div className="absolute top-[68%] -left-[10%] w-[48vw] h-[48vw] max-w-[620px] max-h-[620px] rounded-full bg-gradient-to-tr from-cyan-600/15 via-blue-600/10 to-transparent blur-[110px] dark:from-cyan-500/18 dark:via-blue-600/12" />
         <div className="absolute -bottom-[8%] right-[15%] w-[42vw] h-[42vw] max-w-[550px] max-h-[550px] rounded-full bg-gradient-to-tl from-amber-500/10 via-emerald-500/10 to-transparent blur-[100px] dark:from-amber-500/12 dark:via-emerald-500/10" />
 
-        {/* 1. Precision 32px Technical Engineering Blueprint Grid */}
-        <div 
-          className="absolute inset-0 bg-[linear-gradient(to_right,#0284c712_1px,transparent_1px),linear-gradient(to_bottom,#0284c712_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#38bdf810_1px,transparent_1px),linear-gradient(to_bottom,#38bdf810_1px,transparent_1px)] bg-[size:32px_32px]"
-        />
-
-        {/* 2. Major 160px Engineering Division Grid with Dual-Axis Calibration Lines */}
-        <div 
-          className="absolute inset-0 bg-[linear-gradient(to_right,#0284c71c_1px,transparent_1px),linear-gradient(to_bottom,#0284c71c_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#38bdf818_1px,transparent_1px),linear-gradient(to_bottom,#38bdf818_1px,transparent_1px)] bg-[size:160px_160px]"
-        />
-
-        {/* 3. Subtle Honeycomb Combat Armor & Carbon Matrix Overlay */}
-        <div 
-          className="absolute inset-0 opacity-[0.035] dark:opacity-[0.07] bg-[radial-gradient(#0284c7_1px,transparent_1px)] dark:bg-[radial-gradient(#38bdf8_1px,transparent_1px)] bg-[size:16px_16px]"
-        />
-
-        {/* 4. Left & Right PCB Circuit Traces & Soldering Nodes Vector Graphic */}
-        <svg className="absolute inset-0 size-full opacity-30 dark:opacity-45" xmlns="http://www.w3.org/2000/svg">
+        {/* High-Tech Robotics & Engineering SVG Pattern System */}
+        <svg className="absolute inset-0 size-full opacity-45 dark:opacity-65 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
           <defs>
+            {/* 1. Hexagonal Carbon Armor Honeycomb Mesh */}
+            <pattern id="roboticHexPattern" width="40" height="69.282" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 20 11.547 L 0 0 L 0 23.094 L 20 34.641 L 40 23.094 Z M 0 34.641 L 20 46.188 L 0 57.735 L 0 80.829 L 20 92.376 L 40 80.829 L 40 57.735 L 20 46.188 Z" fill="none" stroke="currentColor" strokeWidth="0.8" className="text-blue-500/18 dark:text-cyan-400/22" />
+              <circle cx="20" cy="11.547" r="1.5" className="fill-blue-500/35 dark:fill-cyan-400/40" />
+              <circle cx="20" cy="46.188" r="1.5" className="fill-blue-500/35 dark:fill-cyan-400/40" />
+            </pattern>
+
+            {/* 2. PCB Circuit Board Traces & Microchip Nodes */}
+            <pattern id="pcbCircuitPattern" width="120" height="120" patternUnits="userSpaceOnUse">
+              <path d="M 0 30 L 40 30 L 60 50 L 120 50 M 30 0 L 30 20 L 50 40 L 50 120 M 80 120 L 80 90 L 100 70 L 120 70 M 0 90 L 20 90 L 40 110 L 40 120" fill="none" stroke="currentColor" strokeWidth="1" className="text-blue-600/22 dark:text-cyan-400/28" />
+              <circle cx="40" cy="30" r="2.2" className="fill-blue-500/45 dark:fill-cyan-300/55" />
+              <circle cx="60" cy="50" r="1.8" className="fill-blue-500/45 dark:fill-cyan-300/55" />
+              <circle cx="50" cy="40" r="2.2" className="fill-cyan-500/45 dark:fill-cyan-300/55" />
+              <circle cx="100" cy="70" r="2.2" className="fill-blue-500/45 dark:fill-cyan-300/55" />
+              <circle cx="20" cy="90" r="2.2" className="fill-cyan-500/45 dark:fill-cyan-300/55" />
+            </pattern>
+
+            {/* 3. CAD Precision Crosshair Grid */}
+            <pattern id="cadGridPattern" width="60" height="60" patternUnits="userSpaceOnUse">
+              <path d="M 60 0 L 0 0 0 60" fill="none" stroke="currentColor" strokeWidth="0.7" className="text-blue-500/12 dark:text-sky-400/18" />
+              <path d="M 30 25 L 30 35 M 25 30 L 35 30" fill="none" stroke="currentColor" strokeWidth="0.8" className="text-blue-600/28 dark:text-cyan-400/35" />
+              <circle cx="30" cy="30" r="1.2" className="fill-blue-500/30 dark:fill-cyan-400/35" />
+            </pattern>
+
             <linearGradient id="circuitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.8" />
               <stop offset="100%" stopColor="#2563eb" stopOpacity="0.2" />
@@ -612,6 +631,11 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
               <stop offset="100%" stopColor="#d97706" stopOpacity="0.2" />
             </linearGradient>
           </defs>
+
+          {/* Pattern Fill Layers */}
+          <rect width="100%" height="100%" fill="url(#cadGridPattern)" />
+          <rect width="100%" height="100%" fill="url(#roboticHexPattern)" />
+          <rect width="100%" height="100%" fill="url(#pcbCircuitPattern)" />
 
           {/* Left Upper Robotics Circuit Bus */}
           <path d="M 0 120 L 140 120 L 220 200 L 220 380 L 160 440 L 0 440" fill="none" stroke="url(#circuitGrad)" strokeWidth="1.5" strokeDasharray="6 4" />
@@ -665,101 +689,106 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
       
 
 
-      {/* Main Header / Sticky Floating Navigation Bar */}
+      {/* Main Header / Fixed Top Navigation Bar */}
       <motion.header 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center z-50 py-2.5 sm:py-3 border border-slate-200/80 dark:border-slate-800/80 mb-6 sm:mb-12 gap-3 sm:gap-4 sticky top-2 sm:top-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 sm:px-6 rounded-2xl shadow-sm dark:shadow-slate-950/40"
+        className="fixed top-0 left-0 right-0 w-full z-50 py-2.5 sm:py-3.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-900 dark:text-white border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs flex justify-center items-center"
       >
-        <div className="w-full sm:w-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3.5">
-            <img 
-              src={activeLogoUrl || undefined} 
-              alt="AXOTIC Logo" 
-              className="h-9 sm:h-11 md:h-13 w-auto max-w-[45vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all" 
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
-
-          {/* Mobile Member Login Button */}
-          <div className="sm:hidden">
-            <button
-              onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
-              className="px-3 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs uppercase cursor-pointer"
-            >
-              <Lock className="size-3" /> LOGIN
-            </button>
-          </div>
-        </div>
-
-        {/* Dynamic Animated Tab Navigation - Highlights as you scroll */}
-        <nav className="flex items-center gap-1 sm:gap-2 lg:gap-3 overflow-x-auto max-w-full py-1 px-1 scrollbar-none">
-          {['Intro', 'About Us', 'Our Builds', 'Achievements', 'Sponsors', 'Contact'].map((item) => {
-            const isVisible = 
-              (item === 'Intro' && landingData.showIntro !== false) ||
-              (item === 'About Us' && landingData.showAboutUs !== false) ||
-              (item === 'Our Builds' && landingData.showBuilds !== false) ||
-              (item === 'Achievements' && landingData.showAchievements !== false && landingData.achievements && landingData.achievements.length > 0) ||
-              (item === 'Sponsors' && landingData.showSponsors !== false) ||
-              (item === 'Contact' && landingData.showContactUs !== false);
-            
-            if (!isVisible) return null;
-
-            const id = 
-              item === 'Contact' ? 'contact-section' : 
-              item === 'Sponsors' ? 'sponsors-section' : 
-              item === 'Achievements' ? 'achievements-section' :
-              item === 'Our Builds' ? 'builds-section' : 
-              item === 'About Us' ? 'about-section' : 'intro-section';
-
-            const isActive = activeSection === id;
-
-            return (
-              <button
-                key={item}
-                onClick={() => {
-                  const element = document.getElementById(id);
-                  if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
+        <div className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
+          <div className="w-full sm:w-auto flex items-center justify-between">
+            <div className="flex items-center space-x-3.5">
+              <img 
+                src={activeLogoUrl || undefined} 
+                alt="AXOTIC Logo" 
+                className="h-9 sm:h-11 md:h-13 w-auto max-w-[45vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all" 
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
                 }}
-                className={`relative shrink-0 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold tracking-wider uppercase font-mono rounded-xl transition-all cursor-pointer ${
-                  isActive 
-                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50/90 dark:bg-blue-950/60 shadow-xs' 
-                    : 'text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabIndicator"
-                    className="absolute inset-0 bg-blue-100/70 dark:bg-blue-900/40 rounded-xl -z-10"
-                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                  />
-                )}
-                {item}
-              </button>
-            );
-          })}
-        </nav>
+              />
+            </div>
 
-        {/* Secure member login gateway button (Desktop) */}
-        <motion.button
-          id="top-nav-portal-btn"
-          onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="hidden sm:flex relative group overflow-hidden rounded-xl px-3.5 sm:px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-xs font-bold tracking-widest font-mono cursor-pointer shadow-md transition-all hover:shadow-xl hover:shadow-blue-500/20 shrink-0"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <span className="relative flex items-center gap-2 group-hover:text-white transition-colors duration-300">
-            <Lock className="size-3.5" /> 
-            <span>{currentUser ? "MEMBER PORTAL" : "SECURE GATEWAY"}</span>
-          </span>
-        </motion.button>
+            {/* Mobile Member Login Button */}
+            <div className="sm:hidden">
+              <button
+                onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
+                className="px-3 py-1.5 bg-blue-600 dark:bg-blue-500 text-white rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs uppercase cursor-pointer"
+              >
+                <Lock className="size-3" /> LOGIN
+              </button>
+            </div>
+          </div>
+
+          {/* Dynamic Animated Tab Navigation - Highlights as you scroll */}
+          <nav className="flex items-center gap-1 sm:gap-2 lg:gap-3 overflow-x-auto max-w-full py-1 px-1 scrollbar-none">
+            {['Intro', 'About Us', 'Our Builds', 'Achievements', 'Sponsors', 'Contact'].map((item) => {
+              const isVisible = 
+                (item === 'Intro' && landingData.showIntro !== false) ||
+                (item === 'About Us' && landingData.showAboutUs !== false) ||
+                (item === 'Our Builds' && landingData.showBuilds !== false) ||
+                (item === 'Achievements' && landingData.showAchievements !== false && landingData.achievements && landingData.achievements.length > 0) ||
+                (item === 'Sponsors' && landingData.showSponsors !== false) ||
+                (item === 'Contact' && landingData.showContactUs !== false);
+              
+              if (!isVisible) return null;
+
+              const id = 
+                item === 'Contact' ? 'contact-section' : 
+                item === 'Sponsors' ? 'sponsors-section' : 
+                item === 'Achievements' ? 'achievements-section' :
+                item === 'Our Builds' ? 'builds-section' : 
+                item === 'About Us' ? 'about-section' : 'intro-section';
+
+              const isActive = activeSection === id;
+
+              return (
+                <button
+                  key={item}
+                  onClick={() => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                      const yOffset = -90;
+                      const y = element.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0) + yOffset;
+                      window.scrollTo({ top: y, behavior: 'smooth' });
+                      setActiveSection(id);
+                    }
+                  }}
+                  className={`relative shrink-0 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold tracking-wider uppercase font-mono rounded-xl transition-all cursor-pointer ${
+                    isActive 
+                      ? 'text-blue-500 dark:text-blue-400 bg-blue-500/10 dark:bg-blue-950/60 shadow-xs border border-blue-500/30' 
+                      : 'text-slate-600 dark:text-slate-300 hover:text-blue-500 dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTabIndicator"
+                      className="absolute inset-0 bg-blue-500/15 dark:bg-blue-900/40 rounded-xl -z-10"
+                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    />
+                  )}
+                  {item}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Secure member login gateway button (Desktop) */}
+          <motion.button
+            id="top-nav-portal-btn"
+            onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="hidden sm:flex relative group overflow-hidden rounded-xl px-3.5 sm:px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-xs font-bold tracking-widest font-mono cursor-pointer shadow-md transition-all hover:shadow-xl hover:shadow-blue-500/20 shrink-0 border border-slate-700/50 dark:border-slate-200/50"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <span className="relative flex items-center gap-2 group-hover:text-white transition-colors duration-300">
+              <Lock className="size-3.5" /> 
+              <span>{currentUser ? "MEMBER PORTAL" : "SECURE GATEWAY"}</span>
+            </span>
+          </motion.button>
+        </div>
       </motion.header>
 
       {/* Main Public Page Content Container */}

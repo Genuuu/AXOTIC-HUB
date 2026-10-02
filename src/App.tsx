@@ -782,7 +782,7 @@ export default function App() {
       
       {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out OR viewing public mode) */}
       {!currentUser || isPublicView ? (
-        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative min-h-screen overflow-y-auto w-full">
+        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative min-h-screen w-full">
           <PublicLanding 
             onOpenLogin={() => setIsAuthModalOpen(true)} 
             currentUser={currentUser} 
