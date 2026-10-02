@@ -32,7 +32,8 @@ import {
   ChevronDown,
   ChevronRight, PanelLeftClose, PanelLeftOpen,
   Sliders,
-  Trophy
+  Trophy,
+  Landmark
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
 const defaultLogoUrl = "/logo.png";
@@ -49,13 +50,14 @@ import MemberRoster from "./components/MemberRoster";
 import AdminSettings from "./components/AdminSettings";
 import IdeasBoard from "./components/IdeasBoard";
 import CompetitionsHub from "./components/CompetitionsHub";
+import { TreasuryHub } from "./components/TreasuryHub";
 import GeminiChatAssistant from "./components/GeminiChatAssistant";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   const effectiveUser = currentUser;
-  const { logoUrl: remoteLogoUrl } = useWorkspaceSettings(currentUser?.isOfflineMock);
+  const { logoUrl: remoteLogoUrl, generalFundTransactions, customRoles } = useWorkspaceSettings(currentUser?.isOfflineMock);
   const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
@@ -137,8 +139,8 @@ export default function App() {
     });
   };
 
-  // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions"
-  const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions">("home");
+  // Navigation tabs state inside Internal Portal: "home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions" | "treasury"
+  const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions" | "treasury">("home");
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<"general" | "roles" | "onboard" | "logs" | "preferences" | "public_page" | "treasury" | undefined>(undefined);
@@ -990,7 +992,25 @@ export default function App() {
                   Track regional robotics cups, register team alerts, and toggle logistics reminders.
                 </span>
               </button>
-              
+
+              <button
+                id="tab-nav-treasury"
+                onClick={() => setActiveTab("treasury")}
+                className={`w-full px-3 py-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2.5 group relative ${
+                  activeTab === "treasury"
+                    ? "bg-slate-800 text-emerald-400 shadow-sm font-semibold"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                }`}
+              >
+                <Landmark className="size-4 shrink-0 text-emerald-500" /> {!isSidebarCollapsed && <span className="truncate flex-1 text-left">Treasury & Fund</span>}
+
+                <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed text-left">
+                  <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
+                  <strong className="text-white block font-semibold mb-0.5 text-[11px]">General Fund & Treasury</strong>
+                  Monitor team general fund reserves, grants, sponsorship ledgers, and financial accounts.
+                </span>
+              </button>
+
               <button
                 id="tab-nav-settings"
                 onClick={() => setActiveTab("settings")}
@@ -1117,6 +1137,7 @@ export default function App() {
                     {activeTab === "ideas" && "Concept Board & Brainstorming"}
                     {activeTab === "inventory" && "Stockroom & Component Registry"}
                     {activeTab === "roster" && "Active Specialists & Team Directory"}
+                    {activeTab === "treasury" && "General Fund & Team Treasury"}
                     {activeTab === "settings" && (effectiveUser?.role === "admin" ? "Hub Command Center & Administration" : "Personal Preferences & App Settings")}
                   </h1>
                   <p className="text-xs text-slate-550 dark:text-slate-400 font-sans mt-1">
@@ -1125,6 +1146,7 @@ export default function App() {
                     {activeTab === "ideas" && "Propose custom robot attachments, electronic controllers, software nodes, upvote concepts, and promote them to active projects."}
                     {activeTab === "inventory" && "Manage stockroom part catalog listings."}
                     {activeTab === "roster" && "Active specialists with customizable technical tags, contact credentials, and division roles."}
+                    {activeTab === "treasury" && "Monitor team reserves, sponsorship grants, competition prize allocations, and financial ledgers."}
                     {activeTab === "settings" && (effectiveUser?.role === "admin" 
                       ? "Manage taxonomy categories, edit member access clearance, and configure workspace params." 
                       : "Customize visual theme preferences, adjust private layout options, and calibrate personal profile parameters."
@@ -1515,6 +1537,22 @@ export default function App() {
                       <CompetitionsHub currentUser={effectiveUser} roster={roster} />
                     </motion.div>
                   )}
+                  {activeTab === "treasury" && currentUser && (
+                    <motion.div
+                      key="treasury"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                      className="flex-1 flex flex-col"
+                    >
+                      <TreasuryHub 
+                        currentUser={effectiveUser} 
+                        generalFundTransactions={generalFundTransactions} 
+                        customRoles={customRoles} 
+                      />
+                    </motion.div>
+                  )}
                   {activeTab === "settings" && currentUser && (
                     <motion.div
                       key="settings"
@@ -1544,7 +1582,7 @@ export default function App() {
               <div className="flex flex-row overflow-x-auto p-1.5 px-2 text-[10px] sm:text-[11px] font-semibold gap-1 scrollbar-none select-none justify-between items-center sm:justify-around">
                 <button
                   onClick={() => setActiveTab("home")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
                     activeTab === "home" 
                       ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
@@ -1555,29 +1593,29 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setActiveTab("projects")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
                     activeTab === "projects" 
                       ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >
                   <Cpu className={`size-5 mb-1 ${activeTab === "projects" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "projects" ? 2.5 : 2} />
-                  <span>Workspace</span>
+                  <span>Projects</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab("ideas")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
-                    activeTab === "ideas" 
-                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
+                  onClick={() => setActiveTab("treasury")}
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                    activeTab === "treasury" 
+                      ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >
-                  <Zap className={`size-5 mb-1 ${activeTab === "ideas" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "ideas" ? 2.5 : 2} />
-                  <span>Ideas</span>
+                  <Landmark className={`size-5 mb-1 ${activeTab === "treasury" ? "ease-out scale-110" : ""}`} strokeWidth={activeTab === "treasury" ? 2.5 : 2} />
+                  <span>Treasury</span>
                 </button>
                 <button
                   onClick={() => setActiveTab("inventory")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
                     activeTab === "inventory" 
                       ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
@@ -1588,7 +1626,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setActiveTab("roster")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
                     activeTab === "roster" 
                       ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
@@ -1599,7 +1637,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setActiveTab("competitions")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
                     activeTab === "competitions" 
                       ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"
@@ -1617,7 +1655,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}
-                  className={`flex shrink-0 w-[60px] sm:w-[72px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
+                  className={`flex shrink-0 w-[56px] sm:w-[68px] flex-col items-center justify-center py-2 px-1 rounded-xl cursor-pointer transition-all ${
                     activeTab === "settings" 
                       ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold" 
                       : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-800 dark:hover:text-slate-200"

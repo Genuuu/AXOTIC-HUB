@@ -213,8 +213,24 @@ export default function AdminSettings({
   const [userSearch, setUserSearch] = useState("");
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserProfile | null>(null);
   
-  // Custom Roles state
-  const [customRoles, setCustomRoles] = useState<CustomRole[]>(DEFAULT_CUSTOM_ROLES);
+  // Custom Roles state with lazy persistence
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>(() => {
+    const direct = localStorage.getItem("axotic_custom_roles");
+    if (direct) {
+      try {
+        const parsed = JSON.parse(direct);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+    }
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    if (storedGen) {
+      try {
+        const p = JSON.parse(storedGen);
+        if (p.customRoles && Array.isArray(p.customRoles) && p.customRoles.length > 0) return p.customRoles;
+      } catch (_) {}
+    }
+    return DEFAULT_CUSTOM_ROLES;
+  });
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [roleToEdit, setRoleToEdit] = useState<CustomRole | null>(null);
   const [roleNameInput, setRoleNameInput] = useState("");
@@ -223,9 +239,43 @@ export default function AdminSettings({
   const [roleClearanceInput, setRoleClearanceInput] = useState<UserRole>("member");
   const [rolePermissionsInput, setRolePermissionsInput] = useState<PermissionKey[]>(["manage_ideas"]);
   const [roleMemberSearch, setRoleMemberSearch] = useState("");
-  const [divisionTags, setDivisionTags] = useState<string[]>(DEFAULT_DIVISION_TAGS);
+  
+  const [divisionTags, setDivisionTags] = useState<string[]>(() => {
+    const direct = localStorage.getItem("axotic_division_tags");
+    if (direct) {
+      try {
+        const parsed = JSON.parse(direct);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+    }
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    if (storedGen) {
+      try {
+        const p = JSON.parse(storedGen);
+        if (p.divisionTags && Array.isArray(p.divisionTags) && p.divisionTags.length > 0) return p.divisionTags;
+      } catch (_) {}
+    }
+    return DEFAULT_DIVISION_TAGS;
+  });
   const [newDivisionTagInput, setNewDivisionTagInput] = useState("");
-  const [specialtyTags, setSpecialtyTags] = useState<string[]>(DEFAULT_SPECIALTY_TAGS);
+
+  const [specialtyTags, setSpecialtyTags] = useState<string[]>(() => {
+    const direct = localStorage.getItem("axotic_specialty_tags");
+    if (direct) {
+      try {
+        const parsed = JSON.parse(direct);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+    }
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    if (storedGen) {
+      try {
+        const p = JSON.parse(storedGen);
+        if (p.specialtyTags && Array.isArray(p.specialtyTags) && p.specialtyTags.length > 0) return p.specialtyTags;
+      } catch (_) {}
+    }
+    return DEFAULT_SPECIALTY_TAGS;
+  });
   const [newSpecialtyTagInput, setNewSpecialtyTagInput] = useState("");
 
   // User edit state fields
@@ -842,16 +892,20 @@ export default function AdminSettings({
       updatedList = [...customRoles, newRole];
     }
 
+    // Always sync locally for instantaneous persistent tab switching
+    localStorage.setItem("axotic_custom_roles", JSON.stringify(updatedList));
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    let p = storedGen ? JSON.parse(storedGen) : {};
+    p.customRoles = updatedList;
+    localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+
+    setCustomRoles(updatedList);
+    setIsRoleModalOpen(false);
+    setRoleToEdit(null);
+    setSuccessMsg(`Successfully saved role "${roleNameInput}".`);
+    window.dispatchEvent(new Event("axotic_db_update"));
+
     if (currentUser.isOfflineMock) {
-      const storedGen = localStorage.getItem("axotic_mock_general_settings");
-      let p = storedGen ? JSON.parse(storedGen) : {};
-      p.customRoles = updatedList;
-      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
-      setCustomRoles(updatedList);
-      setIsRoleModalOpen(false);
-      setRoleToEdit(null);
-      setSuccessMsg(`Successfully saved role "${roleNameInput}".`);
-      window.dispatchEvent(new Event("axotic_db_update"));
       return;
     }
 
@@ -862,13 +916,9 @@ export default function AdminSettings({
       }).catch(async () => {
         await setDoc(doc(db, "settings", "general"), { customRoles: updatedList }, { merge: true });
       });
-      setCustomRoles(updatedList);
-      setIsRoleModalOpen(false);
-      setRoleToEdit(null);
-      setSuccessMsg(`Successfully saved role "${roleNameInput}".`);
       createAdminLog("ROLE_CONFIGURED", `Configured role "${roleNameInput}" (Clearance: ${roleClearanceInput}, Permissions: ${rolePermissionsInput.length}).`, currentUser);
     } catch (err) {
-      setErrorMsg("Failed to save custom role.");
+      console.warn("Saved locally, but remote Firestore sync failed:", err);
     } finally {
       setLoading(false);
     }
@@ -887,26 +937,30 @@ export default function AdminSettings({
     }
 
     const updatedList = customRoles.filter(r => r.id !== roleId);
+    
+    // Always persist locally
+    localStorage.setItem("axotic_custom_roles", JSON.stringify(updatedList));
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    let p = storedGen ? JSON.parse(storedGen) : {};
+    p.customRoles = updatedList;
+    localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+    setCustomRoles(updatedList);
+    window.dispatchEvent(new Event("axotic_db_update"));
+    setSuccessMsg(`Deleted role "${role.name}".`);
+
     if (currentUser.isOfflineMock) {
-      const storedGen = localStorage.getItem("axotic_mock_general_settings");
-      let p = storedGen ? JSON.parse(storedGen) : {};
-      p.customRoles = updatedList;
-      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
-      setCustomRoles(updatedList);
-      window.dispatchEvent(new Event("axotic_db_update"));
-      setSuccessMsg(`Deleted role "${role.name}".`);
       return;
     }
     try {
       setLoading(true);
       await updateDoc(doc(db, "settings", "general"), {
         customRoles: updatedList
+      }).catch(async () => {
+        await setDoc(doc(db, "settings", "general"), { customRoles: updatedList }, { merge: true });
       });
-      setCustomRoles(updatedList);
-      setSuccessMsg(`Deleted role "${role.name}".`);
       createAdminLog("ROLE_DELETED", `Removed role designation "${role.name}".`, currentUser);
     } catch (err) {
-      setErrorMsg("Failed to delete role.");
+      console.warn("Deleted locally, but remote Firestore sync failed:", err);
     } finally {
       setLoading(false);
     }
@@ -918,18 +972,24 @@ export default function AdminSettings({
     const defaultTags = DEFAULT_DIVISION_TAGS;
     const defaultSpecialties = DEFAULT_SPECIALTY_TAGS;
 
+    localStorage.setItem("axotic_custom_roles", JSON.stringify(defaultList));
+    localStorage.setItem("axotic_division_tags", JSON.stringify(defaultTags));
+    localStorage.setItem("axotic_specialty_tags", JSON.stringify(defaultSpecialties));
+
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    let p = storedGen ? JSON.parse(storedGen) : {};
+    p.customRoles = defaultList;
+    p.divisionTags = defaultTags;
+    p.specialtyTags = defaultSpecialties;
+    localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+
+    setCustomRoles(defaultList);
+    setDivisionTags(defaultTags);
+    setSpecialtyTags(defaultSpecialties);
+    window.dispatchEvent(new Event("axotic_db_update"));
+    setSuccessMsg("Restored default roles, specialty tags, and division tags.");
+
     if (currentUser.isOfflineMock) {
-      const storedGen = localStorage.getItem("axotic_mock_general_settings");
-      let p = storedGen ? JSON.parse(storedGen) : {};
-      p.customRoles = defaultList;
-      p.divisionTags = defaultTags;
-      p.specialtyTags = defaultSpecialties;
-      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
-      setCustomRoles(defaultList);
-      setDivisionTags(defaultTags);
-      setSpecialtyTags(defaultSpecialties);
-      window.dispatchEvent(new Event("axotic_db_update"));
-      setSuccessMsg("Restored default roles, specialty tags, and division tags.");
       return;
     }
 
@@ -940,13 +1000,9 @@ export default function AdminSettings({
         divisionTags: defaultTags,
         specialtyTags: defaultSpecialties
       }, { merge: true });
-      setCustomRoles(defaultList);
-      setDivisionTags(defaultTags);
-      setSpecialtyTags(defaultSpecialties);
-      setSuccessMsg("Restored default roles, specialty tags, and division tags.");
       createAdminLog("ROLES_RESET", "Restored system default role designations, specialty tags, and division tags.", currentUser);
     } catch (err) {
-      setErrorMsg("Failed to restore default roles.");
+      console.warn("Restored locally, remote sync warning:", err);
     } finally {
       setLoading(false);
     }
@@ -971,14 +1027,17 @@ export default function AdminSettings({
   };
 
   const saveDivisionTags = async (updatedTags: string[]) => {
+    localStorage.setItem("axotic_division_tags", JSON.stringify(updatedTags));
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    let p = storedGen ? JSON.parse(storedGen) : {};
+    p.divisionTags = updatedTags;
+    localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+
+    setDivisionTags(updatedTags);
+    window.dispatchEvent(new Event("axotic_db_update"));
+    setSuccessMsg("Updated engineering division tags.");
+
     if (currentUser.isOfflineMock) {
-      const storedGen = localStorage.getItem("axotic_mock_general_settings");
-      let p = storedGen ? JSON.parse(storedGen) : {};
-      p.divisionTags = updatedTags;
-      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
-      setDivisionTags(updatedTags);
-      window.dispatchEvent(new Event("axotic_db_update"));
-      setSuccessMsg("Updated engineering division tags.");
       return;
     }
     try {
@@ -986,11 +1045,9 @@ export default function AdminSettings({
       await setDoc(doc(db, "settings", "general"), {
         divisionTags: updatedTags
       }, { merge: true });
-      setDivisionTags(updatedTags);
-      setSuccessMsg("Updated engineering division tags.");
       createAdminLog("DIVISION_TAGS_UPDATED", `Updated division tags: ${updatedTags.join(", ")}`, currentUser);
     } catch (err) {
-      setErrorMsg("Failed to save division tags.");
+      console.warn("Saved locally, remote division tags sync failed:", err);
     } finally {
       setLoading(false);
     }
@@ -1015,14 +1072,17 @@ export default function AdminSettings({
   };
 
   const saveSpecialtyTags = async (updatedTags: string[]) => {
+    localStorage.setItem("axotic_specialty_tags", JSON.stringify(updatedTags));
+    const storedGen = localStorage.getItem("axotic_mock_general_settings");
+    let p = storedGen ? JSON.parse(storedGen) : {};
+    p.specialtyTags = updatedTags;
+    localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+
+    setSpecialtyTags(updatedTags);
+    window.dispatchEvent(new Event("axotic_db_update"));
+    setSuccessMsg("Updated technical specialty tags.");
+
     if (currentUser.isOfflineMock) {
-      const storedGen = localStorage.getItem("axotic_mock_general_settings");
-      let p = storedGen ? JSON.parse(storedGen) : {};
-      p.specialtyTags = updatedTags;
-      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
-      setSpecialtyTags(updatedTags);
-      window.dispatchEvent(new Event("axotic_db_update"));
-      setSuccessMsg("Updated technical specialty tags.");
       return;
     }
     try {
@@ -1030,11 +1090,9 @@ export default function AdminSettings({
       await setDoc(doc(db, "settings", "general"), {
         specialtyTags: updatedTags
       }, { merge: true });
-      setSpecialtyTags(updatedTags);
-      setSuccessMsg("Updated technical specialty tags.");
       createAdminLog("SPECIALTY_TAGS_UPDATED", `Updated specialty tags: ${updatedTags.join(", ")}`, currentUser);
     } catch (err) {
-      setErrorMsg("Failed to save specialty tags.");
+      console.warn("Saved locally, remote specialty tags sync failed:", err);
     } finally {
       setLoading(false);
     }
