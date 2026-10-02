@@ -23,7 +23,8 @@ import {
   Award,
   Medal,
   Star,
-  ZoomIn
+  ZoomIn,
+  Database
 } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "motion/react";
 const defaultLogoUrl = "/logo.png";
@@ -31,9 +32,12 @@ import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { defaultPublicLandingData, PublicLandingData, Achievement } from "./defaultPublicLandingData";
+import { UserProfile } from "../types";
 
 interface PublicLandingProps {
   onOpenLogin: () => void;
+  currentUser?: UserProfile | null;
+  onSwitchToDatabase?: () => void;
 }
 
 // Framer motion animation variants
@@ -389,7 +393,7 @@ const AchievementLightbox = ({ achievement, onClose }: { achievement: Achievemen
   );
 };
 
-export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
+export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToDatabase }: PublicLandingProps) {
   const [copied, setCopied] = useState(false);
   const [activeBuild, setActiveBuild] = useState<string | null>(null);
   const [lightboxImageIndex, setLightboxImageIndex] = useState<{idx: number, imgIdx: number} | null>(null);
@@ -609,6 +613,25 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_85%_65%_at_50%_25%,transparent_35%,#f8fafc_100%)] dark:bg-[radial-gradient(ellipse_85%_65%_at_50%_25%,transparent_25%,#070b14_100%)]" />
       </div>
       
+      {/* Sticky Logged In Switcher Bar */}
+      {currentUser && onSwitchToDatabase && (
+        <div className="w-full z-50 bg-slate-950/95 border-b border-slate-800 text-white px-4 sm:px-8 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xl animate-fade-in font-sans">
+          <div className="flex items-center gap-2.5 text-xs font-medium font-mono">
+            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-300">
+              Viewing Public Homepage as <strong className="text-white">{currentUser.displayName}</strong> ({currentUser.customRoleName || currentUser.role})
+            </span>
+          </div>
+          <button
+            onClick={onSwitchToDatabase}
+            className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer uppercase tracking-wider font-mono border border-blue-400/30 shrink-0"
+          >
+            <Database className="size-3.5" />
+            <span>Switch to Secured Database</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Header / Sticky Floating Navigation Bar */}
       <motion.header 
         initial={{ opacity: 0, y: -20 }}
@@ -629,13 +652,21 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             />
           </div>
 
-          {/* Mobile Login Button */}
+          {/* Mobile Login / Database Toggle Button */}
           <div className="sm:hidden">
             <button
-              onClick={onOpenLogin}
-              className="px-3 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs"
+              onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
+              className="px-3 py-1.5 bg-blue-600 dark:bg-blue-500 text-white rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs uppercase cursor-pointer"
             >
-              <Lock className="size-3" /> LOGIN
+              {currentUser ? (
+                <>
+                  <Database className="size-3" /> DATABASE
+                </>
+              ) : (
+                <>
+                  <Lock className="size-3" /> LOGIN
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -690,18 +721,27 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
           })}
         </nav>
 
-        {/* Secure login gateway button (Desktop) */}
+        {/* Secure login gateway / Database button (Desktop) */}
         <motion.button
           id="top-nav-portal-btn"
-          onClick={onOpenLogin}
+          onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           className="hidden sm:flex relative group overflow-hidden rounded-xl px-3.5 sm:px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-xs font-bold tracking-widest font-mono cursor-pointer shadow-md transition-all hover:shadow-xl hover:shadow-blue-500/20 shrink-0"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           <span className="relative flex items-center gap-2 group-hover:text-white transition-colors duration-300">
-            <Lock className="size-3.5" /> 
-            <span>SECURE GATEWAY</span>
+            {currentUser ? (
+              <>
+                <Database className="size-3.5" /> 
+                <span>SECURED DATABASE</span>
+              </>
+            ) : (
+              <>
+                <Lock className="size-3.5" /> 
+                <span>SECURE GATEWAY</span>
+              </>
+            )}
           </span>
         </motion.button>
       </motion.header>

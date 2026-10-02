@@ -33,7 +33,8 @@ import {
   ChevronRight, PanelLeftClose, PanelLeftOpen,
   Sliders,
   Trophy,
-  Landmark
+  Landmark,
+  Database
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
 const defaultLogoUrl = "/logo.png";
@@ -144,6 +145,7 @@ export default function App() {
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<"general" | "roles" | "onboard" | "logs" | "preferences" | "public_page" | "treasury" | undefined>(undefined);
+  const [isPublicView, setIsPublicView] = useState(false);
   
   // UI Control states
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -762,16 +764,21 @@ export default function App() {
   return (
     <div className={`${currentUser ? "h-[100dvh] overflow-hidden" : "min-h-screen"} bg-[#f8fafc] dark:bg-[#070b14] text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200 antialiased selection:bg-blue-500 selection:text-white relative`}>
       
-      {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out) */}
-      {!currentUser ? (
-        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative">
-          <PublicLanding onOpenLogin={() => setIsAuthModalOpen(true)} />
+      {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out OR viewing public mode) */}
+      {!currentUser || isPublicView ? (
+        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative min-h-screen">
+          <PublicLanding 
+            onOpenLogin={() => setIsAuthModalOpen(true)} 
+            currentUser={currentUser} 
+            onSwitchToDatabase={() => setIsPublicView(false)} 
+          />
           
           <AuthModal 
             isOpen={isAuthModalOpen} 
             onClose={() => setIsAuthModalOpen(false)}
             onAuthSuccess={(profile) => {
               setCurrentUser(profile);
+              setIsPublicView(false);
             }}
           />
         </div>
@@ -879,6 +886,20 @@ export default function App() {
               {!isSidebarCollapsed && <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-2.5 mb-2 hidden md:block animate-fade-in">
                 Member Workspace
               </div>}
+
+              <button
+                id="tab-nav-public-site"
+                onClick={() => setIsPublicView(true)}
+                className="w-full px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2.5 group relative text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600/30 border border-blue-500/20 mb-2"
+              >
+                <Globe className="size-4 shrink-0 text-blue-400" /> {!isSidebarCollapsed && <span className="truncate flex-1 text-left font-mono font-bold uppercase text-[10.5px] tracking-wider">Public Homepage</span>}
+
+                <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 w-56 scale-90 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-150 origin-left bg-slate-950 text-slate-300 rounded-lg text-[10px] p-2.5 shadow-xl border border-slate-800 z-50 hidden md:block select-none font-normal normal-case tracking-normal leading-relaxed text-left">
+                  <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[5px] border-r-slate-950 animate-fade-in" />
+                  <strong className="text-white block font-semibold mb-0.5 text-[11px]">Public Landing Page</strong>
+                  Preview team origin narrative, public robot showcase, achievements, and sponsorship terms.
+                </span>
+              </button>
               
               <button
                 id="tab-nav-home"
@@ -1155,6 +1176,16 @@ export default function App() {
                 </div>
                 
                 <div className="flex items-center gap-3 relative">
+                  {/* Public Site Quick Toggle */}
+                  <button
+                    onClick={() => setIsPublicView(true)}
+                    className="px-3.5 py-1.8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer uppercase tracking-wider font-mono border border-blue-400/30 shrink-0"
+                    title="Switch to Public Homepage Preview"
+                  >
+                    <Globe className="size-3.5" />
+                    <span>Public Homepage</span>
+                  </button>
+
                   {/* Notifications Dropdown */}
                   <div className="relative">
                     <button

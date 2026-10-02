@@ -65,6 +65,7 @@ import { resolveMemberRole, ROLE_COLOR_MAP } from "../roleUtils";
 import AddMember from "./AddMember";
 import TagInput from "./TagInput";
 import { defaultPublicLandingData, PublicLandingData, SubTeam, BuildSpec, TrackRecord, Achievement } from "./defaultPublicLandingData";
+import { TreasuryHub } from "./TreasuryHub";
 
 interface AdminSettingsProps {
   currentUser: UserProfile;
@@ -1103,28 +1104,39 @@ export default function AdminSettings({
     const chosenRole = customRoles.find(r => r.id === roleId);
     if (!chosenRole) return;
 
-    if (currentUser.isOfflineMock) {
-      const stored = localStorage.getItem("axotic_mock_roster");
-      if (stored) {
-        const list: UserProfile[] = JSON.parse(stored);
-        const idx = list.findIndex(u => u.uid === targetUser.uid);
-        if (idx !== -1) {
-          list[idx] = {
-            ...list[idx],
+    // Immediately update local roster state & local storage
+    const updatedRoster = roster.map(u => 
+      u.uid === targetUser.uid 
+        ? {
+            ...u,
             role: chosenRole.clearance,
             customRoleId: chosenRole.id,
             customRoleName: chosenRole.name
-          };
-          localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
-          if (currentUser.uid === targetUser.uid) {
-            localStorage.setItem("axotic_local_auth", JSON.stringify(list[idx]));
           }
-          setRoster(list);
-          window.dispatchEvent(new Event("axotic_db_update"));
-          setSuccessMsg(`Assigned role "${chosenRole.name}" to ${targetUser.displayName}.`);
-          setTimeout(() => setSuccessMsg(""), 4000);
-        }
+        : u
+    );
+    setRoster(updatedRoster);
+    localStorage.setItem("axotic_mock_roster", JSON.stringify(updatedRoster));
+    if (currentUser.uid === targetUser.uid) {
+      const currentStored = localStorage.getItem("axotic_local_auth");
+      if (currentStored) {
+        try {
+          const parsed = JSON.parse(currentStored);
+          localStorage.setItem("axotic_local_auth", JSON.stringify({
+            ...parsed,
+            role: chosenRole.clearance,
+            customRoleId: chosenRole.id,
+            customRoleName: chosenRole.name
+          }));
+        } catch (_) {}
       }
+    }
+    window.dispatchEvent(new Event("axotic_db_update"));
+
+    setSuccessMsg(`Assigned role "${chosenRole.name}" to ${targetUser.displayName}. Click "Save Role Changes" to confirm across workspace.`);
+    setTimeout(() => setSuccessMsg(""), 4000);
+
+    if (currentUser.isOfflineMock) {
       return;
     }
 
@@ -1134,38 +1146,49 @@ export default function AdminSettings({
         role: chosenRole.clearance,
         customRoleId: chosenRole.id,
         customRoleName: chosenRole.name
+      }).catch(async () => {
+        await setDoc(userRef, {
+          role: chosenRole.clearance,
+          customRoleId: chosenRole.id,
+          customRoleName: chosenRole.name
+        }, { merge: true });
       });
       createAdminLog("ROLE_ASSIGNED", `Assigned role "${chosenRole.name}" to ${targetUser.displayName}.`, currentUser);
-      setSuccessMsg(`Assigned role "${chosenRole.name}" to ${targetUser.displayName}.`);
-      setTimeout(() => setSuccessMsg(""), 4000);
     } catch (err) {
-      setErrorMsg("Failed to update member role.");
-      setTimeout(() => setErrorMsg(""), 4000);
+      console.warn("Role saved locally, remote Firestore sync warning:", err);
     }
   };
 
   // Quick update sub-team division tag
   const handleQuickUpdateSubTeam = async (targetUser: UserProfile, newSubTeam: string) => {
-    if (currentUser.isOfflineMock) {
-      const stored = localStorage.getItem("axotic_mock_roster");
-      if (stored) {
-        const list: UserProfile[] = JSON.parse(stored);
-        const idx = list.findIndex(u => u.uid === targetUser.uid);
-        if (idx !== -1) {
-          list[idx] = {
-            ...list[idx],
+    const updatedRoster = roster.map(u => 
+      u.uid === targetUser.uid 
+        ? {
+            ...u,
             subTeam: newSubTeam.trim()
-          };
-          localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
-          if (currentUser.uid === targetUser.uid) {
-            localStorage.setItem("axotic_local_auth", JSON.stringify(list[idx]));
           }
-          setRoster(list);
-          window.dispatchEvent(new Event("axotic_db_update"));
-          setSuccessMsg(`Updated division tag to "${newSubTeam}".`);
-          setTimeout(() => setSuccessMsg(""), 4000);
-        }
+        : u
+    );
+    setRoster(updatedRoster);
+    localStorage.setItem("axotic_mock_roster", JSON.stringify(updatedRoster));
+    if (currentUser.uid === targetUser.uid) {
+      const currentStored = localStorage.getItem("axotic_local_auth");
+      if (currentStored) {
+        try {
+          const parsed = JSON.parse(currentStored);
+          localStorage.setItem("axotic_local_auth", JSON.stringify({
+            ...parsed,
+            subTeam: newSubTeam.trim()
+          }));
+        } catch (_) {}
       }
+    }
+    window.dispatchEvent(new Event("axotic_db_update"));
+
+    setSuccessMsg(`Updated division tag to "${newSubTeam}".`);
+    setTimeout(() => setSuccessMsg(""), 4000);
+
+    if (currentUser.isOfflineMock) {
       return;
     }
 
@@ -1173,12 +1196,72 @@ export default function AdminSettings({
       const userRef = doc(db, "users", targetUser.uid);
       await updateDoc(userRef, {
         subTeam: newSubTeam.trim()
+      }).catch(async () => {
+        await setDoc(userRef, { subTeam: newSubTeam.trim() }, { merge: true });
       });
-      setSuccessMsg(`Updated division tag to "${newSubTeam}".`);
-      setTimeout(() => setSuccessMsg(""), 4000);
     } catch (err) {
-      setErrorMsg("Failed to update division tag.");
-      setTimeout(() => setErrorMsg(""), 4000);
+      console.warn("Division tag saved locally, remote sync warning:", err);
+    }
+  };
+
+  // Master Save All Settings & Member Roles Button
+  const handleSaveAllMemberRoles = async () => {
+    setLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      // 1. Sync custom roles, division tags, and specialty tags
+      localStorage.setItem("axotic_custom_roles", JSON.stringify(customRoles));
+      localStorage.setItem("axotic_division_tags", JSON.stringify(divisionTags));
+      localStorage.setItem("axotic_specialty_tags", JSON.stringify(specialtyTags));
+
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.customRoles = customRoles;
+      p.divisionTags = divisionTags;
+      p.specialtyTags = specialtyTags;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+
+      // 2. Sync roster assignments
+      localStorage.setItem("axotic_mock_roster", JSON.stringify(roster));
+
+      // 3. Remote Firestore sync
+      if (!currentUser.isOfflineMock) {
+        await setDoc(doc(db, "settings", "general"), {
+          customRoles: customRoles,
+          divisionTags: divisionTags,
+          specialtyTags: specialtyTags
+        }, { merge: true }).catch(() => {});
+
+        for (const u of roster) {
+          try {
+            await updateDoc(doc(db, "users", u.uid), {
+              role: u.role,
+              customRoleId: u.customRoleId,
+              customRoleName: u.customRoleName,
+              subTeam: u.subTeam
+            }).catch(async () => {
+              await setDoc(doc(db, "users", u.uid), {
+                role: u.role,
+                customRoleId: u.customRoleId,
+                customRoleName: u.customRoleName,
+                subTeam: u.subTeam
+              }, { merge: true });
+            });
+          } catch (_) {}
+        }
+      }
+
+      window.dispatchEvent(new Event("axotic_db_update"));
+      createAdminLog("ROLES_SAVED", "Confirmed & saved all member roles, permissions, and division assignments.", currentUser);
+      setSuccessMsg("All member roles, permissions, and division assignments have been saved & confirmed!");
+      setTimeout(() => setSuccessMsg(""), 5000);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Failed to save member role assignments.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2003,12 +2086,21 @@ export default function AdminSettings({
             <div className="flex flex-wrap items-center gap-2.5 z-10 self-start md:self-auto">
               <button
                 type="button"
+                onClick={handleSaveAllMemberRoles}
+                disabled={loading}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer uppercase tracking-wider"
+              >
+                <Check className="size-4" />
+                <span>{loading ? "Saving..." : "Save Role Changes"}</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleResetRolesToDefaults}
                 className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-all border border-slate-700/80 flex items-center gap-1.5 cursor-pointer shadow-xs"
                 title="Restore default role designations and division tags"
               >
                 <RefreshCw className="size-3.5 text-slate-400" />
-                <span>Reset to Defaults</span>
+                <span>Reset Defaults</span>
               </button>
               <button
                 type="button"
@@ -2427,6 +2519,23 @@ export default function AdminSettings({
                     })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Confirmation & Save Bar */}
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border">
+              <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                <span>Role changes apply instantly and persist across all workspace tabs. Confirm below to broadcast across team roster.</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveAllMemberRoles}
+                disabled={loading}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider shrink-0 w-full sm:w-auto"
+              >
+                <Check className="size-4" />
+                <span>{loading ? "Saving..." : "Confirm & Save Member Roles"}</span>
+              </button>
             </div>
           </div>
 
@@ -3175,159 +3284,11 @@ export default function AdminSettings({
 
       
       {activeSubTab === "treasury" && (
-        <div className="space-y-8 animate-fade-in text-left font-sans">
-          
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-emerald-50 dark:bg-emerald-950/20 p-4 border border-emerald-200 dark:border-emerald-900/30 rounded-2xl">
-            <div>
-              <h3 className="text-base font-extrabold text-emerald-900 dark:text-emerald-100 uppercase font-mono tracking-tight flex items-center gap-2">
-                <Banknote className="size-5 text-emerald-600 dark:text-emerald-500" /> General Fund & Treasury
-              </h3>
-              <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-1">
-                Manage global team treasury funds (sponsorships, prize money, grants, and donations). Money in the General Fund belongs to the team and is never divided among members.
-              </p>
-            </div>
-          </div>
-
-          {/* Add Funds Form */}
-          <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5">
-            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2">Record Transaction</h4>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div className="md:col-span-1">
-                <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Type</label>
-                <select
-                  value={newFundType}
-                  onChange={(e) => setNewFundType(e.target.value as "deposit" | "withdrawal")}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs font-mono outline-hidden dark:text-white"
-                >
-                  <option value="deposit">Deposit (In)</option>
-                  <option value="withdrawal">Withdrawal (Out)</option>
-                </select>
-              </div>
-              <div className="md:col-span-1">
-                <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Amount (LKR)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={newFundAmount}
-                  onChange={(e) => setNewFundAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs font-mono outline-hidden text-right dark:text-white"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono">Description</label>
-                  <div className="flex items-center gap-1">
-                    {["Prize Money", "Sponsorship", "University Grant", "Donation"].map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => setNewFundNotes(tag)}
-                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 dark:text-slate-300 font-mono transition-colors cursor-pointer"
-                      >
-                        +{tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newFundNotes}
-                    onChange={(e) => setNewFundNotes(e.target.value)}
-                    placeholder="e.g. Competition Prize Money, Corporate Sponsorship..."
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs font-mono outline-hidden dark:text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddFundTransaction}
-                    disabled={loading}
-                    className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all active:scale-95 cursor-pointer"
-                  >
-                    {loading ? "..." : "Record"}
-                  </button>
-                </div>
-              </div>
-            </div>
-            {successMsg && <div className="text-xs font-bold text-emerald-600 animate-fade-in">{successMsg}</div>}
-            {errorMsg && <div className="text-xs font-bold text-red-500 animate-fade-in">{errorMsg}</div>}
-          </div>
-
-          {/* Ledger Table */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="size-4 opacity-50" />
-                Ledger History
-              </h4>
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Available General Fund Balance</span>
-                <span className="font-mono text-lg font-black text-emerald-700 dark:text-emerald-400">
-                  LKR {generalFundTransactions.reduce((sum, tx) => sum + (tx.type === "deposit" ? tx.amount : -tx.amount), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-            
-            {generalFundTransactions.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm font-mono italic">
-                No general fund transactions recorded yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase text-[9px] tracking-wider select-none">
-                      <th className="p-3">Date</th>
-                      <th className="p-3">Type</th>
-                      <th className="p-3">Description</th>
-                      <th className="p-3 text-right">Amount (LKR)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                    {generalFundTransactions.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="p-3 font-mono text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {new Date(tx.date).toLocaleDateString()}
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                            tx.type === "deposit"
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                          }`}>
-                            {tx.type === "deposit" ? "+" : "-"} {tx.type}
-                          </span>
-                        </td>
-                        <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
-                          {tx.notes}
-                        </td>
-                        <td className={`p-3 text-right font-mono font-bold whitespace-nowrap ${
-                          tx.type === "deposit" 
-                            ? "text-emerald-600 dark:text-emerald-400" 
-                            : "text-amber-600 dark:text-amber-400"
-                        }`}>
-                          {tx.type === "deposit" ? "+" : "-"} {tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteFundTransaction(tx.id)}
-                            className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                            title="Delete transaction"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-        </div>
+        <TreasuryHub 
+          currentUser={currentUser} 
+          generalFundTransactions={generalFundTransactions} 
+          customRoles={customRoles} 
+        />
       )}
 
       {activeSubTab === "public_page" && publicPageData && (
