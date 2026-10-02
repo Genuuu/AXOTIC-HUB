@@ -84,9 +84,11 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           displayName: displayName || "Genu Kakisara (Admin)",
           email: email,
           role: "admin",
+          customRoleId: "admin",
+          customRoleName: "Team Lead & Admin",
           avatarUrl: photoURL || `https://api.dicebear.com/7.x/pixel-art/svg?seed=Genu`,
           joinedAt: new Date().toISOString(),
-          subTeam: "Core Engineering",
+          subTeam: "Software & Autonomy",
           birthday: "2003-08-15"
         };
         await setDoc(userDocRef, profile);
@@ -178,9 +180,11 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             displayName: "Genu Kakisara (Admin)",
             email: email,
             role: "admin",
+            customRoleId: "admin",
+            customRoleName: "Team Lead & Admin",
             avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=Genu`,
             joinedAt: new Date().toISOString(),
-            subTeam: "Core Engineering",
+            subTeam: "Software & Autonomy",
             birthday: "2003-08-15"
           };
           await setDoc(userDocRef, profile);

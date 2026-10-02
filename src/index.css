@@ -13,14 +13,26 @@ html {
 
 body {
   font-family: var(--font-sans);
-  @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 ease-out;
 }
 
-/* Universal premium smooth theme cross-fade transitions for color properties */
-*, *::before, *::after {
-  transition-property: background-color, border-color, text-decoration-color, fill, stroke, color;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 500ms;
+/* Custom sleek and smooth scrollbars without layout stutter */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
 }
 
 /* Universal dark theme overrides to guarantee comprehensive and premium visual compatibility */

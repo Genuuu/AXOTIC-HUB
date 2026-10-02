@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
   
     // ==========================================
-    // HELPER FUNCTIONS
+    // HELPER FUNCTIONS & ROLE CHECK
     // ==========================================
     
     // Check if the request is authenticated via Firebase Auth
@@ -16,71 +16,80 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    // Check if the user is an admin
+    // Check if the user is an admin or bootstrapped admin
     function isAdmin() {
-      return isAuthenticated() && getUserData().role == 'admin';
+      return isAuthenticated() && (
+        (request.auth.token.email == "genukakisara@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+      );
     }
 
     // ==========================================
-    // PUBLIC CONFIGURATION & SETTINGS
+    // PUBLIC CONFIGURATION & LANDING
     // ==========================================
 
     // Public Landing Page configuration
     match /landing/{docId} {
-      allow read: if true; // Publicly viewable by anyone on the landing page
+      allow read: if true; // Publicly viewable by prospective applicants & sponsors
       allow write: if isAdmin();
     }
     
-    // App configuration settings
+    // App configuration & workspace settings
     match /settings/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAuthenticated(); // Team members can record general fund ledger syncs
     }
     
-    // Connection test document
+    // Connection diagnostics test document
     match /test/{docId} {
       allow read, write: if isAuthenticated();
     }
 
     // ==========================================
-    // USERS & ACCESS CONTROL
+    // USERS & ROSTER ACCESS CONTROL
     // ==========================================
 
-    // Users collection
     match /users/{userId} {
-      // Any authenticated user can read other users (for the roster)
+      // Authenticated team members can browse roster directory
       allow read: if isAuthenticated();
       
-      // Users can create their own profile during initial signup/linking
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      // Users can register their initial profile; admins can provision members
+      allow create: if isAuthenticated() && (
+        request.auth.uid == userId || isAdmin()
+      );
       
-      // Users can update their own profile, or admins can update any profile (e.g. promoting roles)
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Users can update their own profile, but non-admins cannot self-promote to admin
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (request.auth.uid == userId && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+        ))
+      );
       
-      // Only admins can delete members from the roster
+      // Only admins can remove members from the roster
       allow delete: if isAdmin();
     }
 
     // ==========================================
-    // INVENTORY & CATEGORIES
+    // INVENTORY STOCKROOM & CATEGORIES
     // ==========================================
 
     match /inventory/{docId} {
-      // Authenticated users can view and edit inventory (for checking out parts)
+      // Team members can view, add, and adjust stockroom component quantities
       allow read, write: if isAuthenticated();
     }
     
     match /categories/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin(); // Only admins can add/remove inventory categories
+      // Team members can view categories; members and admins can organize categories
+      allow read, write: if isAuthenticated();
     }
 
     // ==========================================
-    // PROJECTS & HARDWARE
+    // PROJECTS, LOGS & ALLOCATED HARDWARE
     // ==========================================
 
     match /projects/{projectId} {
-      // Team members can view and manage projects
+      // Team members can collaborate on active builds
       allow read, write: if isAuthenticated(); 
       
       match /hardware/{hwId} {
@@ -97,20 +106,21 @@ service cloud.firestore {
     // ==========================================
 
     match /competitions/{compId} {
-      // Team members can view and manage competitions
+      // Team members can register and manage competition timelines
       allow read, write: if isAuthenticated();
     }
 
     // ==========================================
-    // IDEAS BOARD
+    // BRAINSTORMING & IDEAS BOARD
     // ==========================================
 
     match /ideas/{ideaId} {
+      // Team members can propose ideas, upvote, and promote to builds
       allow read, write: if isAuthenticated();
     }
 
     // ==========================================
-    // NOTIFICATIONS & LOGGING
+    // NOTIFICATIONS & AUDIT LOGS
     // ==========================================
 
     match /notifications/{notifId} {
@@ -119,15 +129,15 @@ service cloud.firestore {
 
     match /admin_logs/{logId} {
       allow read: if isAdmin();
-      // Any authenticated action might trigger an admin log
+      // Authenticated team actions record audit logs
       allow create: if isAuthenticated(); 
-      // Logs are immutable and should never be edited or deleted
+      // Logs are immutable for security auditing
       allow update, delete: if false; 
     }
     
-    // Firebase Extensions Mail collection (if used for sending emails)
+    // Outbound email triggers
     match /mail/{mailId} {
-      allow create: if isAdmin();
+      allow create: if isAuthenticated();
       allow read, update, delete: if false;
     }
   }

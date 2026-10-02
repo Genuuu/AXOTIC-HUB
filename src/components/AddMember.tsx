@@ -1,8 +1,10 @@
 import React, { useState, useRef } from "react";
 import { db, handleFirestoreError, OperationType, createAdminLog } from "../firebase";
 import { doc, setDoc, collection } from "firebase/firestore";
-import { UserPlus, Sparkles, CheckCircle2, Calendar, Shield, Mail, Upload, Camera, Trash2, GraduationCap, HardDrive, FileText, Tag } from "lucide-react";
+import { UserPlus, Sparkles, CheckCircle2, Calendar, Shield, Mail, Upload, Camera, Trash2, GraduationCap, HardDrive, FileText, Tag, ChevronDown } from "lucide-react";
 import { UserProfile, UserRole } from "../types";
+import { useWorkspaceSettings } from "../useWorkspaceSettings";
+import { ROLE_COLOR_MAP } from "../roleUtils";
 import TagInput from "./TagInput";
 
 interface AddMemberProps {
@@ -12,10 +14,13 @@ interface AddMemberProps {
 export default function AddMember({ currentUser }: AddMemberProps) {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<UserRole>("member");
+  const { customRoles, divisionTags, specialtyTags } = useWorkspaceSettings(currentUser.isOfflineMock);
+  const [selectedRoleId, setSelectedRoleId] = useState("core_engineer");
+  const [subTeam, setSubTeam] = useState(divisionTags[0] || "Software & Autonomy");
+  const [customDivision, setCustomDivision] = useState("");
+  const [specifications, setSpecifications] = useState("");
   const [birthday, setBirthday] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
-  const [subTeam, setSubTeam] = useState("Core Engineering");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [homepageUrl, setHomepageUrl] = useState("");
   
@@ -98,13 +103,21 @@ export default function AddMember({ currentUser }: AddMemberProps) {
     // Fallback to stylized dicebear pixel avatar if no upload was selected
     const finalAvatar = avatarUrl || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(displayName.trim())}`;
     
+    const chosenRole = customRoles.find(r => r.id === selectedRoleId);
+    const finalClearance: UserRole = chosenRole ? chosenRole.clearance : "member";
+    const finalRoleName = chosenRole ? chosenRole.name : "Core Engineer";
+    const finalSubTeam = subTeam === "Other" ? (customDivision.trim() || (divisionTags[0] || "General")) : (subTeam || divisionTags[0] || "General");
+
     const payload: UserProfile = {
       uid: newUid,
       displayName: displayName.trim(),
       email: email.trim().toLowerCase(),
-      role: role,
+      role: finalClearance,
+      customRoleId: chosenRole ? chosenRole.id : undefined,
+      customRoleName: finalRoleName,
+      specifications: specifications.trim(),
       birthday: birthday || "",
-      subTeam: subTeam,
+      subTeam: finalSubTeam,
       phoneNumber: phoneNumber.trim(),
       homepageUrl: homepageUrl.trim(),
       avatarUrl: finalAvatar,
@@ -130,12 +143,12 @@ export default function AddMember({ currentUser }: AddMemberProps) {
 
         createAdminLog(
           "MEMBER_ONBOARDED",
-          `Onboarded new member "${displayName.trim()}" directly to active directory division "${subTeam}" as system role "${role}".`,
+          `Onboarded new member "${displayName.trim()}" directly to active directory division "${finalSubTeam}" as role "${finalRoleName}" (${finalClearance}).`,
           currentUser
         );
 
         window.dispatchEvent(new Event("axotic_db_update"));
-        setSuccessMsg(`Successfully registered ${displayName.trim()} in local Sandbox! They can log in instantly with Google Account: ${email.trim().toLowerCase()}`);
+        setSuccessMsg(`Successfully registered ${displayName.trim()} in local Sandbox! Assigned role: ${finalRoleName} [${finalSubTeam}]`);
         resetForm();
         setLoading(false);
       }, 600);
@@ -159,7 +172,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
                 <p style="color: #64748b; font-size: 13px; margin: 0 0 16px 0;">Onboarding Access Whitelist Active</p>
                 <div style="height: 1px; background-color: #f1f5f9; margin-bottom: 20px;"></div>
                 <p style="font-size: 14px; color: #334155; line-height: 1.5;">Hello <strong>${displayName.trim()}</strong>,</p>
-                <p style="font-size: 14px; color: #334155; line-height: 1.5;">You have been registered as an active <strong>${role === "admin" ? "Systems Administrator" : "Engineering Specialist"}</strong> on the AXOTIC Engineering Portal.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.5;">You have been registered as an active <strong>${finalRoleName}</strong> (${finalSubTeam}) on the AXOTIC Engineering Portal.</p>
                 <p style="font-size: 14px; color: #334155; line-height: 1.5;">Your Google Account has been whitelisted. You can log in instantly utilizing the official Google popup or email sign-in.</p>
                 
                 <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
@@ -178,11 +191,11 @@ export default function AddMember({ currentUser }: AddMemberProps) {
         console.warn("Failed to write to Trigger Email Firestore subcollection:", mailErr instanceof Error ? mailErr.message : String(mailErr));
       }
 
-      setSuccessMsg(`Successfully registered ${displayName.trim()} to live Firestore database! Whitelist access notification dispatched to: ${email.trim().toLowerCase()}.`);
+      setSuccessMsg(`Successfully registered ${displayName.trim()}! Assigned role: ${finalRoleName} [${finalSubTeam}]. Notification dispatched to: ${email.trim().toLowerCase()}.`);
       
       createAdminLog(
         "MEMBER_ONBOARDED",
-        `Onboarded new member "${displayName.trim()}" directly to active directory division "${subTeam}" as system role "${role}".`,
+        `Onboarded new member "${displayName.trim()}" directly to active directory division "${finalSubTeam}" as role "${finalRoleName}" (${finalClearance}).`,
         currentUser
       );
       
@@ -197,10 +210,12 @@ export default function AddMember({ currentUser }: AddMemberProps) {
   const resetForm = () => {
     setDisplayName("");
     setEmail("");
-    setRole("member");
+    setSelectedRoleId("core_engineer");
+    setSubTeam(divisionTags[0] || "Software & Autonomy");
+    setCustomDivision("");
+    setSpecifications("");
     setBirthday("");
     setAvatarUrl("");
-    setSubTeam("Core Engineering");
     setPhoneNumber("");
     setHomepageUrl("");
     if (fileInputRef.current) {
@@ -344,29 +359,91 @@ export default function AddMember({ currentUser }: AddMemberProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <Calendar className="size-3.5 text-slate-400" /> Birthday
+                    <Shield className="size-3.5 text-blue-600" /> Assigned Role Designation <span className="text-rose-500 font-bold">*</span>
                   </label>
-                  <input
-                    type="date"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2.5 text-xs sm:text-sm outline-hidden transition-all text-slate-800 cursor-pointer"
-                    value={birthday}
-                    onChange={(e) => setBirthday(e.target.value)}
-                  />
+                  <select
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2.5 text-xs font-bold cursor-pointer outline-hidden transition-all text-slate-800"
+                    value={selectedRoleId}
+                    onChange={(e) => setSelectedRoleId(e.target.value)}
+                  >
+                    {customRoles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.clearance === "admin" ? "Admin Clearance" : "Standard Member"})
+                      </option>
+                    ))}
+                  </select>
+                  {(() => {
+                    const r = customRoles.find(cr => cr.id === selectedRoleId);
+                    if (!r) return null;
+                    const col = ROLE_COLOR_MAP[r.color] || ROLE_COLOR_MAP.blue;
+                    return (
+                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${col.badge}`}>
+                          <span className={`size-1.5 rounded-full ${col.dot}`} />
+                          {r.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 truncate max-w-[200px]">{r.description}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <Shield className="size-3.5 text-slate-400" /> System Role
+                    <Tag className="size-3.5 text-blue-600" /> Engineering Division / Tag <span className="text-rose-500 font-bold">*</span>
                   </label>
                   <select
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2.5 text-xs cursor-pointer outline-hidden transition-all text-slate-800"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2.5 text-xs font-bold cursor-pointer outline-hidden transition-all text-slate-800"
+                    value={subTeam}
+                    onChange={(e) => setSubTeam(e.target.value)}
                   >
-                    <option value="member">Standard Member (View & Write)</option>
-                    <option value="admin">System Admin (Full Authorizations)</option>
+                    {divisionTags.map((dt) => (
+                      <option key={dt} value={dt}>
+                        {dt}
+                      </option>
+                    ))}
+                    <option value="Other">+ Custom Division Tag...</option>
                   </select>
+                  {subTeam === "Other" && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom division name..."
+                      value={customDivision}
+                      onChange={(e) => setCustomDivision(e.target.value)}
+                      className="mt-1.5 w-full bg-white border border-blue-300 focus:border-blue-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium outline-hidden"
+                    />
+                  )}
+                  <span className="block text-[10px] text-slate-400 mt-1">
+                    Associates member with engineering division milestones & projects.
+                  </span>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Sparkles className="size-3.5 text-purple-600" /> Technical Specialty Tags
+                </label>
+                <TagInput
+                  value={specifications}
+                  onChange={setSpecifications}
+                  placeholder="e.g. ROS 2, PCB Design, Computer Vision, SLAM..."
+                  suggestions={specialtyTags}
+                />
+                <span className="block text-[10px] text-slate-400 mt-1">
+                  Assign technical skillsets & specialties used for project team matching and build logs.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Calendar className="size-3.5 text-slate-400" /> Birthday (Optional)
+                </label>
+                <input
+                  type="date"
+                  className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2 text-xs outline-hidden transition-all text-slate-800 cursor-pointer"
+                  value={birthday}
+                  onChange={(e) => setBirthday(e.target.value)}
+                />
               </div>
 
               {/* Optional Panel */}

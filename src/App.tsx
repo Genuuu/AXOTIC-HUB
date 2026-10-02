@@ -141,6 +141,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"home" | "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions">("home");
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [settingsSubTab, setSettingsSubTab] = useState<"general" | "roles" | "onboard" | "logs" | "preferences" | "public_page" | "treasury" | undefined>(undefined);
   
   // UI Control states
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -377,8 +378,10 @@ export default function App() {
             displayName: "Genu Kakisara (Lead)",
             email: "genu.kakisara@axotic.org",
             role: "admin",
+            customRoleId: "admin",
+            customRoleName: "Team Lead & Admin",
             avatarUrl: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Genu",
-            subTeam: "Core Engineering",
+            subTeam: "Software & Autonomy",
             phoneNumber: "+1 (555) 019-2834",
             joinedAt: new Date(Date.now() - 3600000 * 24 * 50).toISOString(),
             isOfflineMock: true
@@ -388,8 +391,10 @@ export default function App() {
             displayName: "Bob Axel",
             email: "bob.axel@axotic.org",
             role: "member",
+            customRoleId: "core_engineer",
+            customRoleName: "Core Engineer",
             avatarUrl: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Bob",
-            subTeam: "Core Engineering",
+            subTeam: "Hardware & Electronics",
             phoneNumber: "+1 (555) 014-9382",
             joinedAt: new Date(Date.now() - 3600000 * 24 * 30).toISOString(),
             isOfflineMock: true
@@ -399,8 +404,10 @@ export default function App() {
             displayName: "Sarah Connor",
             email: "sarah.connor@axotic.org",
             role: "member",
+            customRoleId: "software_lead",
+            customRoleName: "Lead Software Engineer",
             avatarUrl: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Sarah",
-            subTeam: "Core Engineering",
+            subTeam: "Software & Autonomy",
             phoneNumber: "+1 (555) 012-4451",
             joinedAt: new Date(Date.now() - 3600000 * 24 * 10).toISOString(),
             isOfflineMock: true
@@ -751,11 +758,11 @@ export default function App() {
   }).length;
 
   return (
-    <div className={`${currentUser ? "h-[100dvh] overflow-hidden" : "min-h-screen"} bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-all duration-500 ease-in-out antialiased selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-950 dark:selection:text-blue-100`}>
+    <div className={`${currentUser ? "h-[100dvh] overflow-hidden" : "min-h-screen"} bg-[#f8fafc] dark:bg-[#070b14] text-slate-800 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200 antialiased selection:bg-blue-500 selection:text-white relative`}>
       
       {/* 1. PUBLIC PRESENTATION MODE (User Is Logged Out) */}
       {!currentUser ? (
-        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in">
+        <div id="public-context-shell" className="flex-1 flex flex-col animate-fade-in relative">
           <PublicLanding onOpenLogin={() => setIsAuthModalOpen(true)} />
           
           <AuthModal 
@@ -769,7 +776,7 @@ export default function App() {
       ) : (
         
         /* 2. SECURE MEMBER HUB WORKSPACE (User Is Logged In) */
-        <div id="secure-hub-context-shell" className="flex-1 flex flex-col md:flex-row h-full w-full">
+        <div id="secure-hub-context-shell" className="flex-1 flex flex-col md:flex-row h-full w-full relative">
           
           {/* Side navigation for desktop / top header for mobile */}
           <aside id="secured-hub-sidebar" className={`sticky top-0 z-40 w-full ${isSidebarCollapsed ? "md:w-20" : "md:w-64"} bg-slate-900/85 backdrop-blur-md border-b border-slate-800 md:relative md:bg-slate-900 md:backdrop-blur-none md:border-b-0 md:border-r md:border-slate-800/80 md:shadow-[4px_0_24px_rgba(0,0,0,0.1)] flex flex-col justify-between shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:h-full overflow-x-hidden`}>
@@ -1068,10 +1075,40 @@ export default function App() {
           </aside>
 
           {/* Main workspace frame on right */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto scroll-smooth overscroll-contain relative">
             
+            {/* Professional Technical Robotics Background Grid & Ambient Glows */}
+            <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden transform-gpu md:left-20 lg:left-64">
+              {/* Ambient Glow Orbs */}
+              <div className="absolute -top-[10%] -left-[5%] w-[45vw] h-[45vw] max-w-[600px] max-h-[600px] rounded-full bg-gradient-to-br from-blue-600/10 via-cyan-500/8 to-transparent blur-[100px] dark:from-blue-600/15 dark:via-cyan-500/10" />
+              <div className="absolute top-[40%] -right-[10%] w-[45vw] h-[45vw] max-w-[550px] max-h-[550px] rounded-full bg-gradient-to-bl from-indigo-600/10 via-blue-500/8 to-transparent blur-[110px] dark:from-indigo-600/15 dark:via-blue-500/10" />
+              <div className="absolute -bottom-[10%] left-[25%] w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] rounded-full bg-gradient-to-tr from-emerald-500/8 via-cyan-500/8 to-transparent blur-[90px] dark:from-emerald-500/12 dark:via-cyan-500/8" />
+
+              {/* Technical Coordinate Blueprint Matrix Pattern */}
+              <div 
+                className="absolute inset-0 bg-[linear-gradient(to_right,#0284c70d_1px,transparent_1px),linear-gradient(to_bottom,#0284c70d_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#38bdf80b_1px,transparent_1px),linear-gradient(to_bottom,#38bdf80b_1px,transparent_1px)] bg-[size:32px_32px]"
+              />
+
+              {/* Major 160px Engineering Subdivision Grid */}
+              <div 
+                className="absolute inset-0 bg-[linear-gradient(to_right,#0284c714_1px,transparent_1px),linear-gradient(to_bottom,#0284c714_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#38bdf810_1px,transparent_1px),linear-gradient(to_bottom,#38bdf810_1px,transparent_1px)] bg-[size:160px_160px]"
+              />
+
+              {/* Precision Micro Dot Overlay */}
+              <div 
+                className="absolute inset-0 opacity-20 dark:opacity-30"
+                style={{
+                  backgroundImage: `radial-gradient(circle, currentColor 1px, transparent 1px)`,
+                  backgroundSize: '32px 32px'
+                }}
+              />
+
+              {/* Subtle Depth Vignette */}
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_50%,#f8fafc_100%)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_40%,#070b14_100%)]" />
+            </div>
+
             {/* Header Title Banner with workspace context description */}
-            <header className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800/60 px-6 py-5 hidden md:block text-left transition-colors duration-500 ease-in-out">
+            <header className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/70 px-6 py-5 hidden md:block text-left transition-colors duration-200 sticky top-0 z-30 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display">
@@ -1391,10 +1428,13 @@ export default function App() {
                         currentUser={effectiveUser} 
                         roster={roster} 
                         projectsList={projectsList} 
-                        onNavigate={(tab, projectId) => {
+                        onNavigate={(tab, projectId, subTab) => {
                           setActiveTab(tab);
                           if (projectId) {
                             setSelectedProjectId(projectId);
+                          }
+                          if (subTab) {
+                            setSettingsSubTab(subTab as any);
                           }
                         }}
                         onOpenEditProfile={handleOpenEditProfile}
@@ -1490,6 +1530,7 @@ export default function App() {
                         onToggleTheme={() => setIsDark(!isDark)}
                         themeMode={themeMode}
                         onChangeThemeMode={setThemeMode}
+                        initialSubTab={settingsSubTab}
                       />
                     </motion.div>
                   )}

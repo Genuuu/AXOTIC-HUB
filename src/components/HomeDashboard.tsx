@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { db, handleFirestoreError, OperationType } from "../firebase";
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import { 
   Compass, Banknote, Sliders, Layers, ShieldCheck, 
   Warehouse, 
@@ -19,31 +19,25 @@ import {
   CheckCircle2, 
   Briefcase, 
   ArrowRight,
+  ArrowDownLeft,
+  ArrowUpRight,
   Sparkles,
   Tag,
   Trophy,
+  Eye,
+  EyeOff,
   X
 } from "lucide-react";
 import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, AllocatedHardware, Competition, GeneralFundTransaction } from "../types";
 import TagInput from "./TagInput";
-import { 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip as ChartTooltip, 
-  Cell, 
-  PieChart, 
-  Pie 
-  , LineChart, Line, AreaChart, Area, CartesianGrid } from "recharts";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
+import { resolveMemberRole } from "../roleUtils";
 
 interface HomeDashboardProps {
   currentUser: UserProfile;
   roster: UserProfile[];
   projectsList: Project[];
-  onNavigate: (tab: "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions", projectId?: string) => void;
+  onNavigate: (tab: "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions", projectId?: string, subTab?: string) => void;
   onOpenEditProfile: () => void;
 }
 
@@ -99,7 +93,19 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
   const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
   const [chartView, setChartView] = useState<"parts" | "categories">("parts");
   const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const { generalFundTransactions } = useWorkspaceSettings(currentUser.isOfflineMock);
+  const { generalFundTransactions, customRoles } = useWorkspaceSettings(currentUser.isOfflineMock);
+  
+  // Treasury visibility on Home Dashboard (hidden by default)
+  const [showTreasury, setShowTreasury] = useState<boolean>(() => {
+    const saved = localStorage.getItem("axotic_home_show_treasury");
+    return saved === "true"; // default to false (hidden)
+  });
+
+  const toggleShowTreasury = () => {
+    const nextVal = !showTreasury;
+    setShowTreasury(nextVal);
+    localStorage.setItem("axotic_home_show_treasury", String(nextVal));
+  };
   
   // Add Fund Modal State
   const [showAddFundModal, setShowAddFundModal] = useState(false);
@@ -129,11 +135,11 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
       recordedBy: currentUser.uid
     };
 
-    const nextTx = [newTx, ...generalFundTransactions];
-
     if (currentUser.isOfflineMock) {
       const stored = localStorage.getItem("axotic_mock_general_settings");
       let parsed = stored ? JSON.parse(stored) : {};
+      const currentStoredTx: GeneralFundTransaction[] = Array.isArray(parsed.generalFundTransactions) ? parsed.generalFundTransactions : (generalFundTransactions || []);
+      const nextTx = [newTx, ...currentStoredTx.filter(t => t.id !== newTx.id)];
       parsed.generalFundTransactions = nextTx;
       localStorage.setItem("axotic_mock_general_settings", JSON.stringify(parsed));
       setNewFundAmount("");
@@ -145,22 +151,22 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
 
     setFundLoading(true);
     try {
-      await updateDoc(doc(db, "settings", "general"), {
-        generalFundTransactions: nextTx
-      });
+      const docRef = doc(db, "settings", "general");
+      const snap = await getDoc(docRef);
+      let existingTx: GeneralFundTransaction[] = [];
+      if (snap.exists() && snap.data()?.generalFundTransactions && Array.isArray(snap.data().generalFundTransactions)) {
+        existingTx = snap.data().generalFundTransactions;
+      } else {
+        existingTx = generalFundTransactions || [];
+      }
+      const nextTx = [newTx, ...existingTx.filter(t => t.id !== newTx.id)];
+      await setDoc(docRef, { generalFundTransactions: nextTx }, { merge: true });
       setNewFundAmount("");
       setNewFundNotes("");
       setShowAddFundModal(false);
     } catch (err) {
-      try {
-        await setDoc(doc(db, "settings", "general"), { generalFundTransactions: nextTx }, { merge: true });
-        setNewFundAmount("");
-        setNewFundNotes("");
-        setShowAddFundModal(false);
-      } catch (innerErr) {
-        handleFirestoreError(innerErr, OperationType.WRITE, "settings/general");
-        alert("Failed to add transaction.");
-      }
+      handleFirestoreError(err, OperationType.WRITE, "settings/general");
+      alert("Failed to record transaction.");
     } finally {
       setFundLoading(false);
     }
@@ -467,52 +473,85 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
 
   // Stat computations
   
-  const fundChartData = useMemo(() => {
-    if (!generalFundTransactions || generalFundTransactions.length === 0) return [];
-    
-    // Sort transactions by date ascending
-    const sorted = [...generalFundTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    // First, find the starting balance before the 30-day window
-    let runningBalance = 0;
-    
-    for (const tx of sorted) {
-      if (new Date(tx.date).getTime() < thirtyDaysAgo.getTime()) {
-        runningBalance += (tx.type === "deposit" ? tx.amount : -tx.amount);
-      }
-    }
-    
-    // Generate an entry for each of the last 30 days
-    const data = [];
-    let currentDay = new Date(thirtyDaysAgo);
-    
-    while (currentDay <= now) {
-      const dayStart = new Date(currentDay);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(currentDay);
-      dayEnd.setHours(23, 59, 59, 999);
-      
-      const dayTx = sorted.filter(tx => {
-        const txDate = new Date(tx.date).getTime();
-        return txDate >= dayStart.getTime() && txDate <= dayEnd.getTime();
+  // Derive all project hardware expenditures where who paid was marked as General Fund
+  const projectHardwareExpenses = useMemo(() => {
+    const list: GeneralFundTransaction[] = [];
+    (projectsList || []).forEach(p => {
+      const bItems = p.budgetItems || [];
+      bItems.forEach(it => {
+        if (it.paidById === "general_fund") {
+          const cost = (it.unitCost || 0) * (it.quantity || 1);
+          if (cost > 0) {
+            list.push({
+              id: `tx-proj-${p.id}-bitem-${it.id}`,
+              amount: cost,
+              type: "withdrawal",
+              notes: `Hardware: ${it.name} (${p.title})`,
+              date: p.updatedAt || p.createdAt || new Date().toISOString(),
+              recordedBy: p.leaderName || "Project"
+            });
+          }
+        }
       });
-      
-      const dayChange = dayTx.reduce((sum, tx) => sum + (tx.type === "deposit" ? tx.amount : -tx.amount), 0);
-      runningBalance += dayChange;
-      
-      data.push({
-        date: currentDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        balance: runningBalance,
-      });
-      
-      currentDay = new Date(currentDay.getTime() + 24 * 60 * 60 * 1000);
-    }
+    });
+    return list;
+  }, [projectsList]);
+
+  const totalProjectHardwareCost = useMemo(() => {
+    return projectHardwareExpenses.reduce((sum, e) => sum + e.amount, 0);
+  }, [projectHardwareExpenses]);
+
+  // Combine recorded treasury transactions with project hardware expenses seamlessly (avoiding any duplicate IDs)
+  const combinedTransactions = useMemo(() => {
+    const recorded = generalFundTransactions || [];
+    const recordedIds = new Set(recorded.map(tx => tx.id));
     
-    return data;
-  }, [generalFundTransactions]);
+    // Add any hardware expense from projects that isn't already stored in recorded transactions
+    const missingExpenses = projectHardwareExpenses.filter(hw => !recordedIds.has(hw.id));
+    
+    // For items in recorded that start with tx-proj-, update their amount to match the current project item state
+    const liveExpenseMap = new Map(projectHardwareExpenses.map(hw => [hw.id, hw]));
+    const reconciledRecorded = recorded
+      // Filter out any stale project hardware transactions whose items were deleted from projects
+      .filter(tx => !tx.id.startsWith("tx-proj-") || liveExpenseMap.has(tx.id))
+      .map(tx => {
+        if (tx.id.startsWith("tx-proj-") && liveExpenseMap.has(tx.id)) {
+          return liveExpenseMap.get(tx.id)!;
+        }
+        return tx;
+      });
+
+    return [...missingExpenses, ...reconciledRecorded].sort((a, b) => {
+      const dateA = new Date(a.date).getTime() || 0;
+      const dateB = new Date(b.date).getTime() || 0;
+      return dateB - dateA;
+    });
+  }, [generalFundTransactions, projectHardwareExpenses]);
+
+  // Stat computations with real-time General Fund deductions
+  const currentTreasuryBalance = useMemo(() => {
+    return combinedTransactions.reduce(
+      (sum, tx) => sum + (tx.type === "deposit" ? tx.amount : -tx.amount),
+      0
+    );
+  }, [combinedTransactions]);
+
+  const totalFundDeposits = useMemo(() => {
+    return combinedTransactions
+      .filter(tx => tx.type === "deposit")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+  }, [combinedTransactions]);
+
+  const totalFundWithdrawals = useMemo(() => {
+    return combinedTransactions
+      .filter(tx => tx.type === "withdrawal")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+  }, [combinedTransactions]);
+
+  const recentFundTransactions = useMemo(() => {
+    return combinedTransactions.slice(0, 4);
+  }, [combinedTransactions]);
+
   const ongoingProjects = projectsList.filter(p => p.status !== "Finished");
   const totalGeneralFundAllocations = projectsList.reduce((sum, p) => {
     const fundsList = p.generalFundAllocations || [];
@@ -603,9 +642,22 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
             
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-3 mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-widest bg-white/10 backdrop-blur-sm text-white border border-white/20 px-3 py-1 rounded-full">
-                  {currentUser.role === "admin" ? "Systems Administrator" : "Active Specialist"}
-                </span>
+                {(() => {
+                  const roleBadge = resolveMemberRole(currentUser.customRoleId, currentUser.customRoleName, currentUser.role, customRoles);
+                  return (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-widest bg-white/10 backdrop-blur-sm text-white border border-white/20 px-3 py-1 rounded-full flex items-center gap-1.5">
+                        <span className="size-1.5 rounded-full bg-blue-400" />
+                        {roleBadge.name}
+                      </span>
+                      {currentUser.subTeam && (
+                        <span className="text-[10.5px] font-bold font-mono uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2.5 py-0.5 rounded-full">
+                          {currentUser.subTeam}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <span className="text-[11px] font-mono text-slate-400">
                   Joined {currentUser.joinedAt ? new Date(currentUser.joinedAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : "Recently"}
                 </span>
@@ -677,91 +729,97 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
       {/* 2. BENTO GRID */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-auto">
         
-        {/* Main Chart (Span 8) */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="md:col-span-8 bg-white border border-slate-200 rounded-[32px] p-8 shadow-3xs flex flex-col min-h-[360px]"
-        >
-          <div className="flex justify-between items-start mb-8">
+        {/* Optional Compact General Fund Treasury Banner (Hidden by default, un-extended) */}
+        {showTreasury && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: -10 }}
+            className="md:col-span-12 bg-white border border-slate-200 rounded-[28px] p-6 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+          >
             <div>
-              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest block mb-2 flex items-center gap-2">
-                <Banknote className="size-3.5" /> General Fund Treasury
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1.5">
+                  <Banknote className="size-4" /> General Fund Treasury
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">• Kept in team treasury (not divided among members)</span>
+              </div>
               <div 
-                className="text-4xl md:text-5xl font-black tracking-tighter text-slate-900 cursor-help"
-                title={`LKR ${totalGeneralFundAllocations.toLocaleString('en-US')}`}
+                className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 mt-1 cursor-help"
+                title={`Available Treasury Balance: LKR ${currentTreasuryBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
               >
-                LKR {formatShortLKR(totalGeneralFundAllocations)}
+                LKR {formatShortLKR(currentTreasuryBalance)}
               </div>
-              <div className="mt-2 text-xs text-slate-500 font-medium">
-                Limit cap set at LKR {formatShortLKR(totalBudgetLimit)} across operations
-              </div>
+              {totalProjectHardwareCost > 0 && (
+                <div className="mt-1">
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                    LKR {formatShortLKR(totalProjectHardwareCost)} deducted for project hardware
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowAddFundModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                title="Inject General Fund Treasury Money"
+              >
+                <Plus className="size-3.5" />
+                <span>Inject Funds</span>
+              </button>
+              {currentUser.role === "admin" && (
+                <button
+                  onClick={() => onNavigate("settings", undefined, "treasury")}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  title="Open Full Treasury Ledger in Admin Settings"
+                >
+                  <Sliders className="size-3.5" />
+                  <span>Full Ledger</span>
+                  <ArrowRight className="size-3" />
+                </button>
+              )}
+              <button
+                onClick={toggleShowTreasury}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Hide Treasury"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Command Center Action Portal (Span 12) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          className="md:col-span-12 bg-slate-900 rounded-[32px] p-6 sm:p-8 shadow-lg text-white relative overflow-hidden border border-slate-800"
+        >
+          <div className="absolute top-0 right-0 p-8 opacity-[0.06] pointer-events-none">
+            <Sparkles className="size-48 rotate-12" />
+          </div>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <h3 className="text-lg font-black tracking-wider text-slate-200 font-display flex items-center gap-2">
+                <Terminal className="size-4 text-blue-400" /> Command Center
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Direct access to team inventories, specialists roster, and administrative tools.</p>
             </div>
             <button
-              onClick={() => setShowAddFundModal(true)}
-              className="p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-2xl cursor-pointer transition-colors shadow-sm"
-              title="Inject Funds"
+              onClick={toggleShowTreasury}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition-colors cursor-pointer self-start md:self-auto"
+              title={showTreasury ? "Hide Treasury Banner" : "Peek General Fund Treasury"}
             >
-              <Plus className="size-5" />
+              {showTreasury ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              <span>{showTreasury ? "Hide Treasury" : "Treasury Peek"}</span>
             </button>
           </div>
-          <div className="flex-1 w-full mt-4 -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={fundChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} 
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
-                  tickFormatter={(val) => `${formatShortLKR(val)}`}
-                  dx={-10}
-                />
-                <ChartTooltip 
-                  contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '12px', fontWeight: 'bold' }}
-                  itemStyle={{ color: '#0f172a' }}
-                  formatter={(val) => [`LKR ${Number(val).toLocaleString()}`, 'Balance']}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="#10b981" 
-                  strokeWidth={3} 
-                  fillOpacity={1} 
-                  fill="url(#colorValue)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-
-        {/* Action Portal (Span 4) */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-          className="md:col-span-4 bg-slate-900 rounded-[32px] p-8 shadow-lg text-white relative overflow-hidden flex flex-col border border-slate-800"
-        >
-          <div className="absolute top-0 right-0 p-8 opacity-[0.08] pointer-events-none">
-            <Sparkles className="size-40 rotate-12" />
-          </div>
-          <h3 className="text-lg font-black tracking-wider text-slate-300 font-display mb-6 relative z-10 flex items-center gap-2">
-            <Terminal className="size-4" /> Command Center
-          </h3>
-          <div className="space-y-3 relative z-10 mt-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 relative z-10">
             <button 
               onClick={() => onNavigate("inventory")} 
-              className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all text-sm group cursor-pointer"
+              className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all text-sm group cursor-pointer"
             >
               <span className="flex items-center gap-3 font-semibold text-slate-200">
                 <Warehouse className="size-5 text-blue-400" /> Stockroom & Parts
@@ -770,22 +828,32 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
             </button>
             <button 
               onClick={() => onNavigate("roster")} 
-              className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all text-sm group cursor-pointer"
+              className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all text-sm group cursor-pointer"
             >
               <span className="flex items-center gap-3 font-semibold text-slate-200">
                 <Users className="size-5 text-purple-400" /> Specialist Directory
               </span>
               <ArrowRight className="size-4 opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
             </button>
-            {currentUser.role === "admin" && (
+            {currentUser.role === "admin" ? (
               <button 
-                onClick={() => onNavigate("settings")} 
-                className="w-full flex items-center justify-between p-4 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-2xl border border-emerald-500/20 transition-all text-sm group cursor-pointer"
+                onClick={() => onNavigate("settings", undefined, "treasury")} 
+                className="flex items-center justify-between p-4 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-2xl border border-emerald-500/20 transition-all text-sm group cursor-pointer"
               >
                 <span className="flex items-center gap-3 font-semibold text-emerald-400">
-                  <Sliders className="size-5" /> Admin Settings
+                  <Sliders className="size-5" /> Admin Settings & Ledger
                 </span>
                 <ArrowRight className="size-4 text-emerald-500 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+            ) : (
+              <button 
+                onClick={() => onNavigate("projects")} 
+                className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all text-sm group cursor-pointer"
+              >
+                <span className="flex items-center gap-3 font-semibold text-slate-200">
+                  <Compass className="size-5 text-emerald-400" /> Robotics Projects
+                </span>
+                <ArrowRight className="size-4 opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </button>
             )}
           </div>
@@ -1003,11 +1071,18 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
                 <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Description</label>
                 <input
                   type="text"
-                  placeholder="e.g. University Grant"
+                  placeholder="e.g. Competition Prize Money, Corporate Sponsorship, Grant..."
                   className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm outline-hidden font-medium transition-colors"
                   value={newFundNotes}
                   onChange={(e) => setNewFundNotes(e.target.value)}
                 />
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200/60 p-3 rounded-xl flex items-center gap-2 text-[11px] text-amber-800">
+                <ShieldCheck className="size-4 shrink-0 text-amber-600" />
+                <span>
+                  <strong>General Fund Policy:</strong> Money in the general fund consists of sponsorships, prize money, and team grants. It is kept in the team treasury and is not divided among members.
+                </span>
               </div>
             </div>
 

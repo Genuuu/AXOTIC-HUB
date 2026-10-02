@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trophy, Plus, Trash2 } from 'lucide-react';
+import { X, Trophy, Plus, Trash2, Banknote } from 'lucide-react';
 import { Competition, CompetitionResult, UserProfile } from '../types';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useWorkspaceSettings } from '../useWorkspaceSettings';
 
@@ -17,7 +17,9 @@ export default function CompetitionResultsModal({ competition, roster, onClose, 
   const [results, setResults] = useState<CompetitionResult[]>(competition.results || []);
   const [teamPlacement, setTeamPlacement] = useState<string>(competition.teamPlacement || '');
   const [teamMedals, setTeamMedals] = useState<string>(competition.teamMedals || '');
+  const [prizeMoney, setPrizeMoney] = useState<string>(competition.prizeMoney ? String(competition.prizeMoney) : '');
   const [isSaving, setIsSaving] = useState(false);
+  const { generalFundTransactions } = useWorkspaceSettings(currentUser?.isOfflineMock);
   
 
   const handleAddResult = () => {
@@ -42,6 +44,9 @@ export default function CompetitionResultsModal({ competition, roster, onClose, 
     // Filter out incomplete results
     const validResults = results.filter(r => r.memberId && r.placement);
 
+    const numericPrize = parseFloat(prizeMoney) || 0;
+    const oldPrize = competition.prizeMoney || 0;
+
     if (currentUser?.isOfflineMock) {
       const storedStr = localStorage.getItem("axotic_mock_competitions");
       if (storedStr) {
@@ -51,17 +56,51 @@ export default function CompetitionResultsModal({ competition, roster, onClose, 
           list[compIndex].results = validResults;
           list[compIndex].teamPlacement = teamPlacement;
           list[compIndex].teamMedals = teamMedals;
+          list[compIndex].prizeMoney = numericPrize;
           localStorage.setItem("axotic_mock_competitions", JSON.stringify(list));
-          window.dispatchEvent(new Event("axotic_db_update"));
         }
       }
+      // If new prize money entered, deposit directly to General Fund
+      if (numericPrize > 0 && numericPrize !== oldPrize) {
+        const storedGen = localStorage.getItem("axotic_mock_general_settings");
+        let parsedGen = storedGen ? JSON.parse(storedGen) : {};
+        const existingTx = parsedGen.generalFundTransactions || [];
+        const newTx = {
+          id: `tx-prize-${Date.now()}`,
+          amount: numericPrize,
+          type: "deposit" as const,
+          notes: `Prize Money: ${competition.title}${teamPlacement ? ` (${teamPlacement})` : ''}`,
+          date: new Date().toISOString(),
+          recordedBy: currentUser?.uid || "system"
+        };
+        parsedGen.generalFundTransactions = [newTx, ...existingTx];
+        localStorage.setItem("axotic_mock_general_settings", JSON.stringify(parsedGen));
+      }
+      window.dispatchEvent(new Event("axotic_db_update"));
     } else {
       try {
         await updateDoc(doc(db, "competitions", competition.id), {
           results: validResults,
           teamPlacement,
-          teamMedals
+          teamMedals,
+          prizeMoney: numericPrize
         });
+        if (numericPrize > 0 && numericPrize !== oldPrize) {
+          const newTx = {
+            id: `tx-prize-${Date.now()}`,
+            amount: numericPrize,
+            type: "deposit" as const,
+            notes: `Prize Money: ${competition.title}${teamPlacement ? ` (${teamPlacement})` : ''}`,
+            date: new Date().toISOString(),
+            recordedBy: currentUser?.uid || "system"
+          };
+          const nextTx = [newTx, ...generalFundTransactions];
+          await updateDoc(doc(db, "settings", "general"), {
+            generalFundTransactions: nextTx
+          }).catch(async () => {
+            await setDoc(doc(db, "settings", "general"), { generalFundTransactions: nextTx }, { merge: true });
+          });
+        }
       } catch (err) {
         console.error("Failed to save results", err);
         alert("Error saving results. Check permissions.");
@@ -109,7 +148,7 @@ export default function CompetitionResultsModal({ competition, roster, onClose, 
               <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
                 <Trophy className="size-4 text-blue-500" /> Overall Team Performance
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                     Team Placement / Rank
@@ -134,6 +173,27 @@ export default function CompetitionResultsModal({ competition, roster, onClose, 
                     className="w-full text-xs p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg dark:text-white"
                   />
                 </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Team Prize Money (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={prizeMoney}
+                    onChange={(e) => setPrizeMoney(e.target.value)}
+                    className="w-full text-xs p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-2.5 rounded-lg flex items-center gap-2 text-[10.5px] text-amber-800 dark:text-amber-300">
+                <Banknote className="size-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                <span>
+                  <strong>General Fund Policy:</strong> Prize money belongs to the team and is deposited into the General Fund. It is never divided among members when splitting bills.
+                </span>
               </div>
             </div>
 

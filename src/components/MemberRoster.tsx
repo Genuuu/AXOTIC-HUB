@@ -19,9 +19,12 @@ import {
   Sparkles, 
   Cpu, 
   Layers, 
-  Code
+  Code,
+  ShieldCheck
 } from "lucide-react";
-import { UserProfile, UserRole } from "../types";
+import { UserProfile, UserRole, CustomRole } from "../types";
+import { resolveMemberRole, ROLE_COLOR_MAP } from "../roleUtils";
+import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import TagInput from "./TagInput";
 
 interface MemberRosterProps {
@@ -44,11 +47,14 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
   // Dynamic filter and directory search states
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSubTeam, setActiveSubTeam] = useState<string>("All");
+  const [activeRoleFilter, setActiveRoleFilter] = useState<string>("All");
 
   // In-place profile override editing states
+  const { customRoles, divisionTags, specialtyTags } = useWorkspaceSettings(currentUser.isOfflineMock);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<UserRole>("member");
-  const [editSubTeam, setEditSubTeam] = useState("Core Engineering");
+  const [editCustomRoleId, setEditCustomRoleId] = useState<string>("core_engineer");
+  const [editSubTeam, setEditSubTeam] = useState(divisionTags[0] || "Software & Autonomy");
   const [editPhone, setEditPhone] = useState("");
   const [editHomepage, setEditHomepage] = useState("");
 
@@ -197,12 +203,23 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
   const handleStartProfileEdit = (member: UserProfile) => {
     setEditingProfileId(member.uid);
     setEditRole(member.role || "member");
-    setEditSubTeam(member.subTeam || "Core Engineering");
+    setEditCustomRoleId(member.customRoleId || (member.role === "admin" ? "admin" : "core_engineer"));
+    setEditSubTeam(member.subTeam || (divisionTags[0] || "Software & Autonomy"));
     setEditPhone(member.phoneNumber || "");
     setEditHomepage(member.homepageUrl || "");
   };
 
-  const handleSaveProfileOverride = async (uid: string, updatedRole: UserRole, updatedSubTeam: string, updatedPhone: string, updatedHomepage: string) => {
+  const handleSaveProfileOverride = async (
+    uid: string, 
+    updatedRoleId: string, 
+    updatedSubTeam: string, 
+    updatedPhone: string, 
+    updatedHomepage: string
+  ) => {
+    const chosenRole = customRoles.find(r => r.id === updatedRoleId);
+    const updatedClearance: UserRole = chosenRole ? chosenRole.clearance : "member";
+    const updatedRoleName = chosenRole ? chosenRole.name : "Core Engineer";
+
     if (currentUser.isOfflineMock) {
       setLoadingId(uid);
       const stored = localStorage.getItem("axotic_mock_roster");
@@ -210,8 +227,10 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
         const rosterList: UserProfile[] = JSON.parse(stored);
         const idx = rosterList.findIndex(u => u.uid === uid);
         if (idx !== -1) {
-          rosterList[idx].role = updatedRole;
-          rosterList[idx].subTeam = updatedSubTeam;
+          rosterList[idx].role = updatedClearance;
+          rosterList[idx].customRoleId = chosenRole ? chosenRole.id : undefined;
+          rosterList[idx].customRoleName = updatedRoleName;
+          rosterList[idx].subTeam = updatedSubTeam.trim();
           rosterList[idx].phoneNumber = updatedPhone.trim();
           rosterList[idx].homepageUrl = updatedHomepage.trim();
           localStorage.setItem("axotic_mock_roster", JSON.stringify(rosterList));
@@ -220,8 +239,10 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
           if (currentUser.uid === uid) {
             const updatedProfile = { 
               ...currentUser, 
-              role: updatedRole, 
-              subTeam: updatedSubTeam, 
+              role: updatedClearance, 
+              customRoleId: chosenRole ? chosenRole.id : undefined,
+              customRoleName: updatedRoleName,
+              subTeam: updatedSubTeam.trim(), 
               phoneNumber: updatedPhone.trim(),
               homepageUrl: updatedHomepage.trim()
             };
@@ -242,8 +263,10 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
       setLoadingId(uid);
       const userRef = doc(db, "users", uid);
       await updateDoc(userRef, { 
-        role: updatedRole, 
-        subTeam: updatedSubTeam, 
+        role: updatedClearance, 
+        customRoleId: chosenRole ? chosenRole.id : undefined,
+        customRoleName: updatedRoleName,
+        subTeam: updatedSubTeam.trim(), 
         phoneNumber: updatedPhone.trim(),
         homepageUrl: updatedHomepage.trim()
       });
@@ -276,19 +299,22 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
     const query = searchQuery.toLowerCase();
     const nameMatch = (member.displayName || "").toLowerCase().includes(query);
     const emailMatch = (member.email || "").toLowerCase().includes(query);
-    const matchesSearch = nameMatch || emailMatch;
+    const roleBadge = resolveMemberRole(member.customRoleId, member.customRoleName, member.role, customRoles);
+    const roleMatch = roleBadge.name.toLowerCase().includes(query);
+    const subTeamMatch = (member.subTeam || "").toLowerCase().includes(query);
+    const matchesSearch = nameMatch || emailMatch || roleMatch || subTeamMatch;
 
-    const matchesSubTeam = activeSubTeam === "All" || member.subTeam === activeSubTeam;
+    const matchesSubTeam = activeSubTeam === "All" || (member.subTeam || "").toLowerCase() === activeSubTeam.toLowerCase();
+    const matchesRole = activeRoleFilter === "All" || roleBadge.name === activeRoleFilter || member.customRoleId === activeRoleFilter;
 
-    return matchesSearch && matchesSubTeam;
+    return matchesSearch && matchesSubTeam && matchesRole;
   });
 
-  const defaultSubTeams = ["Core Engineering", "Software", "Hardware", "Design", "Business"];
   const subTeamsList = [
     "All",
     ...Array.from(
       new Set([
-        ...defaultSubTeams,
+        ...(divisionTags || []),
         ...roster.map((u) => u.subTeam).filter(Boolean)
       ])
     )
@@ -386,22 +412,43 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
             )}
           </div>
 
-          {/* Sub Team Filter Pills */}
-          <div className="flex flex-wrap gap-1.5 items-center">
-            {subTeamsList.map((team) => (
-              <button
-                key={team}
-                type="button"
-                onClick={() => setActiveSubTeam(team)}
-                className={`px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
-                  activeSubTeam === team
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200"
-                }`}
+          {/* Division Tag & Role Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            {/* Division Filter Pills */}
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Division:</span>
+              {subTeamsList.map((team) => (
+                <button
+                  key={team}
+                  type="button"
+                  onClick={() => setActiveSubTeam(team)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                    activeSubTeam === team
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
+                >
+                  {team}
+                </button>
+              ))}
+            </div>
+
+            {/* Role Filter Selector */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Role:</span>
+              <select
+                value={activeRoleFilter}
+                onChange={(e) => setActiveRoleFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 outline-hidden cursor-pointer"
               >
-                {team}
-              </button>
-            ))}
+                <option value="All">All Roles ({customRoles.length})</option>
+                {customRoles.map((r) => (
+                  <option key={r.id} value={r.name}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
         </div>
@@ -412,12 +459,13 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
           {/* Matches Counter with clear-all override state */}
           <div className="flex items-center gap-2">
             <span>Showing <strong>{filteredRoster.length}</strong> of {totalCount} active team members</span>
-            {(searchQuery || activeSubTeam !== "All") && (
+            {(searchQuery || activeSubTeam !== "All" || activeRoleFilter !== "All") && (
               <button
                 type="button"
                 onClick={() => {
                   setSearchQuery("");
                   setActiveSubTeam("All");
+                  setActiveRoleFilter("All");
                 }}
                 className="text-blue-600 hover:text-blue-800 font-bold text-[10px] uppercase tracking-wider cursor-pointer underline underline-offset-2 ml-1"
               >
@@ -512,13 +560,15 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                       </div>
                     </div>
 
-                    <span className={`px-2 py-0.5 text-[8px] font-bold font-mono uppercase tracking-wider rounded-md border ${
-                      member.role === "admin"
-                        ? "bg-rose-50 text-rose-700 border-rose-200/80"
-                        : "bg-slate-50 text-slate-500 border-slate-150"
-                    }`}>
-                      {member.role}
-                    </span>
+                    {(() => {
+                      const roleBadge = resolveMemberRole(member.customRoleId, member.customRoleName, member.role, customRoles);
+                      return (
+                        <span className={`px-2 py-0.5 text-[8.5px] font-bold font-mono uppercase tracking-wider rounded-md border flex items-center gap-1 shrink-0 ${roleBadge.badgeClass}`}>
+                          <span className={`size-1.5 rounded-full ${roleBadge.dotClass}`} />
+                          {roleBadge.name}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -527,38 +577,53 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                   {editingProfileId === member.uid ? (
                     <div className="space-y-3 pt-3 border-t border-slate-100">
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-sans">Clearance Role</label>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-sans">Official Role Designation</label>
                         <select
                           className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-1.8 outline-hidden cursor-pointer font-bold text-slate-700"
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value as UserRole)}
+                          value={editCustomRoleId}
+                          onChange={(e) => {
+                            const chosen = customRoles.find(r => r.id === e.target.value);
+                            setEditCustomRoleId(e.target.value);
+                            if (chosen) {
+                              setEditRole(chosen.clearance);
+                            }
+                          }}
                         >
-                          <option value="member">Standard Member</option>
-                          <option value="admin">System Admin (Full Auth)</option>
+                          {customRoles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name} ({r.clearance === "admin" ? "Admin Clearance" : "Standard Member"})
+                            </option>
+                          ))}
                         </select>
                       </div>
 
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-sans">Sub-Team Division</label>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 font-sans">Engineering Division Tag</label>
                         <select
                           className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-1.8 outline-hidden cursor-pointer font-bold text-slate-700"
-                          value={editSubTeam}
-                          onChange={(e) => setEditSubTeam(e.target.value)}
+                          value={divisionTags.includes(editSubTeam) ? editSubTeam : (editSubTeam ? "Other" : (divisionTags[0] || "Other"))}
+                          onChange={(e) => {
+                            if (e.target.value === "Other") {
+                              setEditSubTeam("Other");
+                            } else {
+                              setEditSubTeam(e.target.value);
+                            }
+                          }}
                         >
-                          {defaultSubTeams.map((team) => (
-                            <option key={team} value={team}>{team}</option>
+                          {divisionTags.map((team) => (
+                            <option key={team} value={team}>
+                              {team}
+                            </option>
                           ))}
-                          {!defaultSubTeams.includes(editSubTeam) && editSubTeam && (
-                            <option value={editSubTeam}>{editSubTeam}</option>
-                          )}
                           <option value="Other">Add Custom Division...</option>
                         </select>
-                        {editSubTeam === "Other" && (
+                        {(editSubTeam === "Other" || !divisionTags.includes(editSubTeam)) && (
                           <input
                             type="text"
                             required
                             placeholder="Enter Custom Division Name"
                             className="mt-1.5 w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-1.8 outline-hidden text-slate-700 font-semibold"
+                            value={editSubTeam === "Other" ? "" : editSubTeam}
                             onChange={(e) => setEditSubTeam(e.target.value)}
                           />
                         )}
@@ -596,7 +661,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSaveProfileOverride(member.uid, editRole, editSubTeam, editPhone, editHomepage)}
+                          onClick={() => handleSaveProfileOverride(member.uid, editCustomRoleId, editSubTeam, editPhone, editHomepage)}
                           disabled={loadingId === member.uid}
                           className="px-2.5 py-1 text-[10.5px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-2xs cursor-pointer flex items-center gap-1"
                         >
@@ -606,13 +671,19 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                     </div>
                   ) : (
                     <div className="space-y-2 text-xs pt-3 border-t border-slate-100">
-                      <div className="flex justify-between py-1 border-b border-slate-50">
-                        <span className="text-slate-400 font-medium">Sub-Team:</span>
-                        <span className="font-bold text-slate-700">{member.subTeam || "Core Engineering"}</span>
+                      <div className="flex justify-between items-center py-1 border-b border-slate-50">
+                        <span className="text-slate-400 font-medium">Division Tag:</span>
+                        <span className="font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded text-[10.5px]">
+                          {member.subTeam || (divisionTags[0] || "General")}
+                        </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-slate-50">
+                      <div className="flex justify-between items-center py-1 border-b border-slate-50">
                         <span className="text-slate-400 font-medium">Clearance:</span>
-                        <span className="font-bold uppercase text-slate-700">{member.role}</span>
+                        <span className={`px-2 py-0.5 text-[9px] font-bold font-mono uppercase tracking-wider rounded-md border ${
+                          member.role === "admin" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-slate-50 text-slate-600 border-slate-200"
+                        }`}>
+                          {member.role === "admin" ? "Admin" : "Standard"}
+                        </span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-50">
                         <span className="text-slate-400 font-medium">Contact Number:</span>
@@ -662,6 +733,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                         <TagInput
                           value={tempSpecsText}
                           onChange={(val) => setTempSpecsText(val)}
+                          suggestions={specialtyTags}
                         />
                         <div className="flex items-center gap-1.5 justify-end">
                           <button
@@ -827,19 +899,21 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                             </span>
                           )}
                           <span className="px-1.5 py-0.5 bg-blue-50 border border-blue-100 text-blue-700 text-[9px] font-bold rounded select-none">
-                            {member.subTeam || "Core Engineering"}
+                            {member.subTeam || (divisionTags[0] || "General")}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <span className={`px-2 py-0.5 text-[8px] font-bold font-mono uppercase tracking-wider rounded-md border ${
-                      member.role === "admin"
-                        ? "bg-rose-50 text-rose-700 border-rose-200/80"
-                        : "bg-slate-50 text-slate-500 border-slate-150"
-                    }`}>
-                      {member.role}
-                    </span>
+                    {(() => {
+                      const roleBadge = resolveMemberRole(member.customRoleId, member.customRoleName, member.role, customRoles);
+                      return (
+                        <span className={`px-2 py-0.5 text-[8.5px] font-bold font-mono uppercase tracking-wider rounded-md border flex items-center gap-1 shrink-0 ${roleBadge.badgeClass}`}>
+                          <span className={`size-1.5 rounded-full ${roleBadge.dotClass}`} />
+                          {roleBadge.name}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -851,6 +925,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
                       <TagInput
                         value={tempSpecsText}
                         onChange={(val) => setTempSpecsText(val)}
+                        suggestions={specialtyTags}
                       />
                       <div className="flex items-center gap-1.5 justify-end">
                         <button

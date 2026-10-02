@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   db, 
@@ -42,9 +42,14 @@ import {
   Printer,
   Download,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Minimize2,
+  Maximize2
 } from "lucide-react";
-import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, GeneralFundAllocation, MemberContribution, PeerTransfer } from "../types";
+import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, GeneralFundAllocation, MemberContribution, PeerTransfer, GeneralFundTransaction } from "../types";
+import { useWorkspaceSettings } from "../useWorkspaceSettings";
 
 // Dynamic input preview formatter for high craftsmanship human error checks
 const formatInputPreview = (value: number): string => {
@@ -159,6 +164,19 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   
   // State for print and document format generation
   const [showPrintModal, setShowPrintModal] = useState(false);
+  
+  // Estimates spreadsheet view preferences (hide/collapse, compact/shorter height)
+  const [isEstimateChartHidden, setIsEstimateChartHidden] = useState(false);
+  const [isEstimateChartShort, setIsEstimateChartShort] = useState(true);
+  
+  // General Fund Treasury synchronization
+  const { generalFundTransactions } = useWorkspaceSettings(currentUser.isOfflineMock);
+  const currentGeneralFundBalance = useMemo(() => {
+    return (generalFundTransactions || []).reduce(
+      (sum, tx) => sum + (tx.type === "deposit" ? tx.amount : -tx.amount),
+      0
+    );
+  }, [generalFundTransactions]);
   
   // Custom non-blocking popups for iframe preservation
   const [deleteConfirmProjId, setDeleteConfirmProjId] = useState<string | null>(null);
@@ -979,7 +997,27 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
   const handleConfirmDeleteProject = async () => {
     if (!deleteConfirmProjId) return;
     const projId = deleteConfirmProjId;
-    setDeleteConfirmProjId(null);
+    // Clean up any general fund withdrawal transactions for this project
+    const projPrefix = `tx-proj-${projId}-bitem-`;
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      if (storedGen) {
+        try {
+          const p = JSON.parse(storedGen);
+          if (p.generalFundTransactions) {
+            p.generalFundTransactions = p.generalFundTransactions.filter(
+              (tx: GeneralFundTransaction) => !tx.id.startsWith(projPrefix)
+            );
+            localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+          }
+        } catch (e) {}
+      }
+    } else {
+      const updatedTx = generalFundTransactions.filter(tx => !tx.id.startsWith(projPrefix));
+      updateDoc(doc(db, "settings", "general"), {
+        generalFundTransactions: updatedTx
+      }).catch(() => {});
+    }
 
     if (currentUser.isOfflineMock) {
       const stored = localStorage.getItem("axotic_mock_projects");
@@ -1080,6 +1118,55 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
     return transactions;
   };
 
+  const syncGeneralFundForItems = async (items: BudgetItem[], projId: string, projTitle: string) => {
+    const projPrefix = `tx-proj-${projId}-bitem-`;
+    const gfItems = items.filter(it => it.paidById === "general_fund" && (it.unitCost * it.quantity) > 0);
+
+    let currentTx: GeneralFundTransaction[] = [];
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      if (storedGen) {
+        try {
+          const p = JSON.parse(storedGen);
+          if (p.generalFundTransactions) currentTx = p.generalFundTransactions;
+        } catch (e) {}
+      }
+    } else {
+      currentTx = [...generalFundTransactions];
+    }
+
+    const otherTx = currentTx.filter(tx => !tx.id.startsWith(projPrefix));
+
+    const newGfTx: GeneralFundTransaction[] = gfItems.map(it => ({
+      id: `${projPrefix}${it.id}`,
+      amount: it.unitCost * it.quantity,
+      type: "withdrawal" as const,
+      notes: `Hardware: ${it.name} (${projTitle})`,
+      date: new Date().toISOString(),
+      recordedBy: currentUser.uid || "system"
+    }));
+
+    const updatedTx = [...newGfTx, ...otherTx];
+
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.generalFundTransactions = updatedTx;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+      window.dispatchEvent(new Event("axotic_db_update"));
+    } else {
+      try {
+        await updateDoc(doc(db, "settings", "general"), {
+          generalFundTransactions: updatedTx
+        }).catch(async () => {
+          await setDoc(doc(db, "settings", "general"), { generalFundTransactions: updatedTx }, { merge: true });
+        });
+      } catch (err) {
+        console.error("Failed to sync general fund transactions", err);
+      }
+    }
+  };
+
   const handleUpdateBudgetItems = async (updatedItems: BudgetItem[]) => {
     if (!selectedProject) return;
 
@@ -1091,6 +1178,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       estimatedCost: totalCost, // update estimatedCost automatically for project health graphs compatibility
       updatedAt: new Date().toISOString()
     };
+
+    // Synchronize General Fund deductions for any items paid by general_fund
+    syncGeneralFundForItems(updatedItems, selectedProject.id, selectedProject.title);
 
     if (currentUser.isOfflineMock) {
       const stored = localStorage.getItem("axotic_mock_projects");
@@ -1675,7 +1765,12 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 .reduce((sum, c) => sum + c.amount, 0);
 
               const generalFundTotal = items.filter(it => it.paidById === "general_fund").reduce((sum, it) => sum + (it.unitCost * it.quantity), 0);
-              const netCostToSplit = Math.max(0, costVal + memberReimbursableTotal - generalFundAllocationsTotal - memberDonationsTotal - generalFundTotal);
+              const memberItemsCost = items.filter(it => it.paidById !== "general_fund").reduce((sum, it) => sum + (it.unitCost * it.quantity), 0);
+              
+              // Team Policy: Money in the General Fund (sponsorships, prize money, grants) belongs to the team treasury
+              // and is NEVER divided among members. When calculating the bill to divide among members, prize money /
+              // general fund money is NOT divided among them. Only member out-of-pocket expenses are split.
+              const netCostToSplit = Math.max(0, memberItemsCost + memberReimbursableTotal - memberDonationsTotal);
               
               const participants = Array.from(new Set([selectedProject.leaderId, ...(selectedProject.memberIds || [])])).filter(Boolean);
               const numParticipants = participants.length || 1;
@@ -1771,11 +1866,13 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                 rows.push(["Metric", "Value (LKR)"]);
                 rows.push(["Total Project Budget", budgetVal.toFixed(2)]);
                 rows.push(["Total Cost Sum (Spreadsheet)", costVal.toFixed(2)]);
-                rows.push(["General Fund Support (Inbound)", generalFundAllocationsTotal.toFixed(2)]);
+                rows.push(["General Fund Hardware Direct (Covered by Team)", generalFundTotal.toFixed(2)]);
+                rows.push(["General Fund / Prize Money Treasury (Not Divided)", generalFundAllocationsTotal.toFixed(2)]);
+                rows.push(["Member Out-of-Pocket Items", memberItemsCost.toFixed(2)]);
                 rows.push(["Member Contributions Total", contributionTotal.toFixed(2)]);
                 rows.push(["  - Reimbursable Contributions", memberReimbursableTotal.toFixed(2)]);
-                rows.push(["  - Gift Donations", memberDonationsTotal.toFixed(2)]);
-                rows.push(["Net Member Cost to Split", netCostToSplit.toFixed(2)]);
+                rows.push(["  - Gift Donations (Offsets Bill)", memberDonationsTotal.toFixed(2)]);
+                rows.push(["Net Member Cost to Split (Prize Money Not Divided)", netCostToSplit.toFixed(2)]);
                 rows.push(["Total Members Shared", numParticipants.toString()]);
                 rows.push(["Target Share Per Member", (netCostToSplit / numParticipants).toFixed(2)]);
                 rows.push([]);
@@ -1987,28 +2084,33 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                       </div>
                     </div>
                     
-                    <div className="bg-emerald-50/20 p-4 rounded-xl border border-emerald-100/60 min-w-0 flex flex-col justify-end">
-                      <div className="text-[10px] text-emerald-605 font-bold uppercase tracking-widest truncate">General Fund Support (Inbound)</div>
-                      <div 
-                        className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-emerald-700 transition-all ${getDynamicFontSizeClass(generalFundAllocationsTotal)}`}
-                        title={`Exact General Fund support: LKR ${generalFundAllocationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                      >
-                        LKR {formatShortOption(generalFundAllocationsTotal, generalFundAllocationsTotal < 100_000)}
+                    <div className="bg-emerald-50/20 p-4 rounded-xl border border-emerald-100/60 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] text-emerald-605 font-bold uppercase tracking-widest truncate">General Fund (Treasury)</div>
+                        <div 
+                          className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-emerald-700 transition-all ${getDynamicFontSizeClass(generalFundAllocationsTotal)}`}
+                          title={`Exact General Fund support: LKR ${generalFundAllocationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Retained in team treasury - not divided among members)`}
+                        >
+                          LKR {formatShortOption(generalFundAllocationsTotal, generalFundAllocationsTotal < 100_000)}
+                        </div>
+                      </div>
+                      <div className="text-[8.5px] text-emerald-600/80 font-mono mt-1 select-none truncate" title="Prize money and sponsorships are kept in the team treasury">
+                        Prize & sponsorships not divided
                       </div>
                     </div>
                     
                     <div className="bg-blue-50/20 p-4 rounded-xl border border-blue-100/60 min-w-0 flex flex-col justify-between">
                       <div>
-                        <div className="text-[10px] text-blue-605 font-bold uppercase tracking-widest truncate">Member Contributions</div>
+                        <div className="text-[10px] text-blue-605 font-bold uppercase tracking-widest truncate">Member Bill to Split</div>
                         <div 
-                          className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-blue-700 transition-all ${getDynamicFontSizeClass(contributionTotal)}`}
-                          title={`Exact member contributions: LKR ${contributionTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          className={`font-mono mt-0.5 font-bold truncate cursor-help select-all text-blue-700 transition-all ${getDynamicFontSizeClass(netCostToSplit)}`}
+                          title={`Total member bill to divide: LKR ${netCostToSplit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         >
-                          LKR {formatShortOption(contributionTotal, contributionTotal < 100_000)}
+                          LKR {formatShortOption(netCostToSplit, netCostToSplit < 100_000)}
                         </div>
                       </div>
-                      <div className="text-[8.5px] text-slate-400 mt-1 font-sans truncate select-none" title={`Reimbursable: LKR ${memberReimbursableTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} | Donations: LKR ${memberDonationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}>
-                        Reimbursable: LKR {formatShortOption(memberReimbursableTotal, false)} | Donations: LKR {formatShortOption(memberDonationsTotal, false)}
+                      <div className="text-[8.5px] text-slate-500 mt-1 font-mono truncate select-none" title={`Fair target share: LKR ${(netCostToSplit / numParticipants).toLocaleString('en-US', { minimumFractionDigits: 2 })} per member across ${numParticipants} members`}>
+                        LKR {formatShortOption(netCostToSplit / numParticipants, false)}/member ({numParticipants} members)
                       </div>
                     </div>
                     
@@ -2037,14 +2139,114 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
 
                   {/* REAL EXCEL-LIKE SPREADSHEET LEDGER TABLE */}
                   <div className="space-y-2 text-left">
-                    <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider flex items-center gap-1.5 select-none">
-                      <FileText className="size-4 text-slate-600" />
-                      Estimates spreadsheet
-                    </h4>
-                    
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-2xs">
-                      <table className="w-full text-left border-collapse min-w-[700px]">
-                        <thead>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider flex items-center gap-1.5 select-none">
+                          <FileText className="size-4 text-slate-600" />
+                          Estimates spreadsheet
+                        </h4>
+                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full select-none">
+                          {items.length} {items.length === 1 ? 'item' : 'items'}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 hidden md:inline select-none">
+                          • Total: LKR {costVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                        {/* Shorter / Expand toggle */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isEstimateChartHidden) setIsEstimateChartHidden(false);
+                            setIsEstimateChartShort(!isEstimateChartShort);
+                          }}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none ${
+                            isEstimateChartShort && !isEstimateChartHidden
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                          }`}
+                          title={isEstimateChartShort ? "Switch to full expanded table" : "Make table shorter with compact scroll"}
+                        >
+                          {isEstimateChartShort && !isEstimateChartHidden ? (
+                            <>
+                              <Maximize2 className="size-3" />
+                              <span>Expand Height</span>
+                            </>
+                          ) : (
+                            <>
+                              <Minimize2 className="size-3" />
+                              <span>Make Shorter</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Hide / Show toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setIsEstimateChartHidden(!isEstimateChartHidden)}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none ${
+                            isEstimateChartHidden
+                              ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                          }`}
+                          title={isEstimateChartHidden ? "Show estimates spreadsheet" : "Hide estimates spreadsheet"}
+                        >
+                          {isEstimateChartHidden ? (
+                            <>
+                              <Eye className="size-3" />
+                              <span>Show Table</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="size-3" />
+                              <span>Hide Table</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {isEstimateChartHidden ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-slate-200/60 rounded-lg text-slate-600">
+                            <FileText className="size-4" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800 block">Estimates Spreadsheet Collapsed</span>
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              {items.length} items logged • Total: LKR {costVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {canModifyProject(selectedProject) && (
+                            <button
+                              type="button"
+                              onClick={() => setIsEstimateChartHidden(false)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                            >
+                              <Plus className="size-3.5" />
+                              <span>Add Item</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIsEstimateChartHidden(false)}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          >
+                            <Eye className="size-3.5" />
+                            <span>Show Spreadsheet</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`overflow-x-auto border border-slate-200 rounded-xl shadow-2xs transition-all ${
+                        isEstimateChartShort ? "max-h-[350px] overflow-y-auto" : ""
+                      }`}>
+                        <table className="w-full text-left border-collapse min-w-[700px]">
+                          <thead className={isEstimateChartShort ? "sticky top-0 z-10 bg-slate-50 shadow-xs" : "bg-slate-50"}>
                           <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
                             <th className="p-3 border-r border-slate-200">#</th>
                             <th className="p-3 border-r border-slate-200 w-2/5">Item description & specifications</th>
@@ -2076,9 +2278,15 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                 </td>
                                 <td className="p-3 border-r border-slate-200">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="font-semibold text-slate-700 truncate">{getParticipantName(it.paidById)}</span>
-                                    <span className="text-[8px] uppercase tracking-wide bg-slate-100 text-slate-500 font-bold px-1 rounded-sm">
-                                      {getParticipantRoleLabel(it.paidById)}
+                                    <span className={`font-semibold truncate ${it.paidById === "general_fund" ? "text-emerald-700 font-bold" : "text-slate-700"}`}>
+                                      {getParticipantName(it.paidById)}
+                                    </span>
+                                    <span className={`text-[8px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded-sm ${
+                                      it.paidById === "general_fund"
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                        : "bg-slate-100 text-slate-500"
+                                    }`}>
+                                      {it.paidById === "general_fund" ? "Deducted From Treasury" : getParticipantRoleLabel(it.paidById)}
                                     </span>
                                   </div>
                                 </td>
@@ -2144,10 +2352,16 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                                 <select
                                   value={newBItemPaidById}
                                   onChange={(e) => setNewBItemPaidById(e.target.value)}
-                                  className="w-full bg-white border border-slate-200 focus:border-blue-500 hover:border-slate-350 rounded px-2 py-1.5 text-xs cursor-pointer text-slate-700 outline-hidden font-medium"
+                                  className={`w-full border rounded px-2 py-1.5 text-xs cursor-pointer outline-hidden font-medium transition-colors ${
+                                    newBItemPaidById === "general_fund"
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-bold"
+                                      : "bg-white text-slate-700 border-slate-200 focus:border-blue-500 hover:border-slate-350"
+                                  }`}
                                 >
                                   <option value="">Who paid?</option>
-                                  <option value="general_fund">General Fund</option>
+                                  <option value="general_fund">
+                                    General Fund (Deducted from Treasury • Avail: LKR {formatShortOption(currentGeneralFundBalance, false)})
+                                  </option>
                                   {participants.map(pId => (
                                     <option key={pId} value={pId}>{getParticipantName(pId)}</option>
                                   ))}
@@ -2194,25 +2408,27 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                         </tbody>
                       </table>
                     </div>
-                  </div>
+                  )}
+                </div>
 
                   {/* SPONSOR & EXTERNAL FUNDING */}
                   <div className="space-y-3 pt-2">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
                       <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider flex items-center gap-1.5 select-none">
                         <Briefcase className="size-4 text-indigo-600" />
-                        General Fund Allocations
+                        General Fund Allocations (Sponsorships & Prize Money)
                       </h4>
-                      <p className="text-[10px] text-slate-450 italic">
-                        Document global treasury allocations that reduce out-of-pocket costs that reduce out-of-pocket costs for members.
-                      </p>
+                      <div className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200/60 rounded-md px-2.5 py-1 font-medium flex items-center gap-1.5">
+                        <span className="font-bold">General Fund Rule:</span>
+                        <span>Sponsorships and prize money stay in the team treasury and are not divided among members.</span>
+                      </div>
                     </div>
 
                     {/* Sponsor entries listing table */}
                     <div className="bg-slate-50 border border-slate-205 rounded-xl p-4 space-y-4">
                       {allocations.length === 0 ? (
                         <div className="text-center py-6 text-slate-400 text-xs italic bg-white rounded-lg border border-slate-150">
-                          No general fund allocations logged yet. Add sources below to offset member expense allocations!
+                          No general fund allocations logged yet. (Note: Prize money and sponsorships are retained in team treasury and not divided among members).
                         </div>
                       ) : (
                         <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto shadow-2xs">
@@ -2719,18 +2935,20 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
                       <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider flex items-center gap-1.5 select-none font-medium">
                         <Users className="size-4 text-blue-600" />
-                        Allocated Funding, Imbalances and Reimbursement Splits
+                        Member Expense Division and Settlement Splits
                       </h4>
                       <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-                        {(generalFundAllocationsTotal > 0 || memberDonationsTotal > 0) && (
-                          <span className="text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-250/20 px-2 py-0.5 rounded text-emerald-700 select-none">
-                            Net cost split: LKR {netCostToSplit.toFixed(2)} 
-                            {generalFundAllocationsTotal > 0 && ` (General Fund Support: LKR ${generalFundAllocationsTotal.toFixed(2)})`}
-                            {memberDonationsTotal > 0 && ` (Member Donations: LKR ${memberDonationsTotal.toFixed(2)})`}
+                        <span className="text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-250/20 px-2 py-0.5 rounded text-emerald-700 select-none">
+                          Member Bill to Split: LKR {netCostToSplit.toFixed(2)}
+                          {memberDonationsTotal > 0 && ` (Gift Donations Offset: LKR ${memberDonationsTotal.toFixed(2)})`}
+                        </span>
+                        {generalFundAllocationsTotal > 0 && (
+                          <span className="text-[9px] font-bold uppercase bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-600 select-none" title="Prize money and sponsorships are kept in the General Fund and are not divided among members">
+                            General Fund: LKR {generalFundAllocationsTotal.toFixed(2)} (Kept in Treasury - Not Divided)
                           </span>
                         )}
                         <span className="text-[10px] font-bold uppercase bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-600 select-none">
-                          Split Rule: {splitMode === "equal" ? "Equal Division splitting" : "Custom Custom Divisions"}
+                          Split Rule: {splitMode === "equal" ? "Equal Division" : "Custom Division"}
                         </span>
                       </div>
                     </div>
@@ -2897,16 +3115,18 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                               </span>
                             </div>
                             <div className="p-3 bg-slate-50 rounded-lg border border-slate-155 text-left">
-                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">General Fund Offsets</span>
+                              <span className="block text-[9px] font-bold uppercase text-slate-500 tracking-wider">General Fund (Treasury)</span>
                               <span className="font-mono text-sm sm:text-base font-bold text-slate-900">
                                 LKR {generalFundAllocationsTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
+                              <span className="block text-[8px] text-slate-400 font-mono mt-0.5">Kept in treasury (not divided)</span>
                             </div>
                             <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-155 text-left">
-                              <span className="block text-[9px] font-bold uppercase text-emerald-800 tracking-wider">Net Cost split</span>
+                              <span className="block text-[9px] font-bold uppercase text-emerald-800 tracking-wider">Member Bill to Split</span>
                               <span className="font-mono text-sm sm:text-base font-black text-emerald-600">
                                 LKR {netCostToSplit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
+                              <span className="block text-[8px] text-emerald-700/80 font-mono mt-0.5">{numParticipants} members shared</span>
                             </div>
                           </div>
 
@@ -2954,7 +3174,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
                               <div className="space-y-2">
                                 <h3 className="text-xs font-black uppercase text-slate-800 border-b border-slate-300 pb-1.5 tracking-wider font-mono">
-                                  2. General Fund Allocations
+                                  2. General Fund Allocations (Retained in Treasury - Not Divided)
                                 </h3>
                                 {allocations.length === 0 ? (
                                   <p className="text-xs text-slate-400 italic">No general fund allocations logged.</p>

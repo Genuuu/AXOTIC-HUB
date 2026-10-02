@@ -6,9 +6,16 @@ interface TagInputProps {
   onChange: (value: string) => void;
   placeholder?: string;
   id?: string;
+  suggestions?: string[];
 }
 
-export default function TagInput({ value, onChange, placeholder = "Type tag and press Enter...", id }: TagInputProps) {
+export default function TagInput({ 
+  value, 
+  onChange, 
+  placeholder = "Type tag and press Enter...", 
+  id,
+  suggestions
+}: TagInputProps) {
   const [inputValue, setInputValue] = useState("");
 
   // Split and sanitize tags from the comma separated string
@@ -64,7 +71,9 @@ export default function TagInput({ value, onChange, placeholder = "Type tag and 
     }
   };
 
-  const defaultSuggestions = ["KiCad", "ROS2", "SLAM", "Python", "CAD / SolidWorks", "3D Printing", "Soldering", "C++", "PCB Layout", "ArduPilot"];
+  const activeSuggestions = suggestions && suggestions.length > 0 
+    ? suggestions 
+    : ["ROS 2 & Autonomy", "Embedded C/C++", "PCB Design & KiCad", "Computer Vision & SLAM", "SolidWorks & 3D CAD", "Power Systems & BMS"];
 
   return (
     <div className="space-y-2 text-left" id={id || "tag-input-container"}>
@@ -100,17 +109,17 @@ export default function TagInput({ value, onChange, placeholder = "Type tag and 
       {/* Suggested Quick Tags */}
       <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 select-none">
         <span className="font-semibold uppercase tracking-wider text-[9px] text-slate-400 flex items-center gap-1">
-          <Terminal className="size-3 text-slate-300" /> Suggestions:
+          <Terminal className="size-3 text-slate-300" /> Specialty Suggestions:
         </span>
-        {defaultSuggestions
+        {activeSuggestions
           .filter((s) => !tags.some((t) => t.toLowerCase() === s.toLowerCase()))
-          .slice(0, 5)
+          .slice(0, 8)
           .map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => addTag(s)}
-              className="bg-slate-100/70 hover:bg-slate-200/50 border border-slate-200/50 hover:border-slate-300/60 px-1.5 py-0.5 rounded text-slate-500 hover:text-slate-800 text-[9px] font-semibold transition-all cursor-pointer font-sans"
+              className="bg-slate-100/70 hover:bg-blue-50 border border-slate-200/50 hover:border-blue-200 px-2 py-0.5 rounded text-slate-600 hover:text-blue-700 text-[9.5px] font-semibold transition-all cursor-pointer font-sans"
             >
               + {s}
             </button>

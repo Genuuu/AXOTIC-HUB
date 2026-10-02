@@ -1106,7 +1106,7 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                         )}
                       </div>
                       
-                      {(comp.teamPlacement || comp.teamMedals) && (
+                      {(comp.teamPlacement || comp.teamMedals || (comp.prizeMoney && comp.prizeMoney > 0)) && (
                         <div className="flex flex-col gap-2 p-3 bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-900/10 dark:to-amber-900/5 border border-amber-200/50 dark:border-amber-800/30 rounded-xl mb-3">
                           {comp.teamPlacement && (
                             <div className="flex items-center justify-between">
@@ -1118,6 +1118,17 @@ export default function CompetitionsHub({ currentUser, roster }: CompetitionsHub
                             <div className="flex items-center justify-between border-t border-amber-200/30 dark:border-amber-800/30 pt-2 mt-1">
                               <span className="text-[10px] font-bold text-amber-700/70 dark:text-amber-500/70 uppercase tracking-wider">Total Awards</span>
                               <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-200/50 dark:bg-amber-800/50 px-2 py-0.5 rounded-md">{comp.teamMedals}</span>
+                            </div>
+                          )}
+                          {comp.prizeMoney && comp.prizeMoney > 0 && (
+                            <div className="flex items-center justify-between border-t border-amber-200/30 dark:border-amber-800/30 pt-2 mt-1">
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-500 uppercase tracking-wider flex items-center gap-1">
+                                <span>🏆 Team Prize Money</span>
+                                <span className="text-[8.5px] text-slate-400 dark:text-slate-500 font-mono">(General Fund)</span>
+                              </span>
+                              <span className="text-xs font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-900/40 px-2 py-0.5 rounded-md">
+                                LKR {comp.prizeMoney.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
                             </div>
                           )}
                         </div>

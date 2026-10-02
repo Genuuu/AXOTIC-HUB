@@ -11,6 +11,7 @@ import {
   query,
   limit,
   getDocs,
+  getDoc,
   getDocFromServer
 } from "firebase/firestore";
 import { 
@@ -26,39 +27,44 @@ import {
   AlertCircle, 
   Sparkles, 
   Sliders, 
-  Info,
-  Laptop,
-  Check,
-  ChevronRight,
-  RefreshCw,
-  Clock,
-  UserPlus,
-  UserMinus,
-  ShieldOff,
-  Search,
-  FileCode,
-  SunDim,
-  MoonStar,
-  User,
-  Mail,
-  Phone,
-  Upload,
-  Target,
-  HeartHandshake,
-  Image,
-  Megaphone,
-  Link,
-  Banknote,
-  Layers,
-  PackageOpen,
-  Lightbulb,
-  Compass,
-  Trophy,
+  Info, 
+  Laptop, 
+  Check, 
+  ChevronRight, 
+  RefreshCw, 
+  Clock, 
+  UserPlus, 
+  UserMinus, 
+  ShieldOff, 
+  Search, 
+  FileCode, 
+  SunDim, 
+  MoonStar, 
+  User, 
+  Mail, 
+  Phone, 
+  Upload, 
+  Target, 
+  HeartHandshake, 
+  Image, 
+  Megaphone, 
+  Link, 
+  Banknote, 
+  Layers, 
+  PackageOpen, 
+  Lightbulb, 
+  Compass, 
+  Trophy, 
+  ShieldCheck, 
+  Palette, 
+  Edit2, 
+  X, 
 } from "lucide-react";
-import { UserProfile, UserRole, AdminLog, GeneralFundTransaction } from "../types";
+import { UserProfile, UserRole, AdminLog, GeneralFundTransaction, CustomRole, DEFAULT_CUSTOM_ROLES, DEFAULT_DIVISION_TAGS, DEFAULT_SPECIALTY_TAGS, ALL_PERMISSIONS, PermissionKey } from "../types";
+import { resolveMemberRole, ROLE_COLOR_MAP } from "../roleUtils";
 import AddMember from "./AddMember";
 import TagInput from "./TagInput";
-import { defaultPublicLandingData, PublicLandingData, SubTeam, BuildSpec, TrackRecord } from "./defaultPublicLandingData";
+import { defaultPublicLandingData, PublicLandingData, SubTeam, BuildSpec, TrackRecord, Achievement } from "./defaultPublicLandingData";
 
 interface AdminSettingsProps {
   currentUser: UserProfile;
@@ -66,6 +72,7 @@ interface AdminSettingsProps {
   onToggleTheme?: () => void;
   themeMode?: "light" | "dark" | "system";
   onChangeThemeMode?: (mode: "light" | "dark" | "system") => void;
+  initialSubTab?: "general" | "roles" | "onboard" | "logs" | "preferences" | "public_page" | "treasury";
 }
 
 export default function AdminSettings({ 
@@ -73,11 +80,20 @@ export default function AdminSettings({
   isDark = false, 
   onToggleTheme,
   themeMode,
-  onChangeThemeMode
+  onChangeThemeMode,
+  initialSubTab
 }: AdminSettingsProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"general" | "onboard" | "logs" | "preferences" | "public_page" | "treasury">(() => {
+  const [activeSubTab, setActiveSubTab] = useState<"general" | "roles" | "onboard" | "logs" | "preferences" | "public_page" | "treasury">(() => {
+    if (initialSubTab) return initialSubTab;
     return currentUser?.role === "admin" ? "general" : "preferences";
   });
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
+
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   // General Fund / Treasury
@@ -112,42 +128,41 @@ export default function AdminSettings({
       recordedBy: currentUser.uid
     };
 
-    const nextTx = [newTx, ...generalFundTransactions];
-
     if (currentUser.isOfflineMock) {
       // Offline mode handling (mock)
-      setGeneralFundTransactions(nextTx);
       const stored = localStorage.getItem("axotic_mock_general_settings");
       let parsed = stored ? JSON.parse(stored) : {};
+      const currentStoredTx: GeneralFundTransaction[] = Array.isArray(parsed.generalFundTransactions) ? parsed.generalFundTransactions : (generalFundTransactions || []);
+      const nextTx = [newTx, ...currentStoredTx.filter(t => t.id !== newTx.id)];
       parsed.generalFundTransactions = nextTx;
       localStorage.setItem("axotic_mock_general_settings", JSON.stringify(parsed));
+      setGeneralFundTransactions(nextTx);
       setNewFundAmount("");
       setNewFundNotes("");
       setSuccessMsg("Transaction added to General Fund.");
+      window.dispatchEvent(new Event("axotic_db_update"));
       return;
     }
 
     setLoading(true);
     try {
-      await updateDoc(doc(db, "settings", "general"), {
-        generalFundTransactions: nextTx
-      });
+      const docRef = doc(db, "settings", "general");
+      const snap = await getDoc(docRef);
+      let existingTx: GeneralFundTransaction[] = [];
+      if (snap.exists() && snap.data()?.generalFundTransactions && Array.isArray(snap.data().generalFundTransactions)) {
+        existingTx = snap.data().generalFundTransactions;
+      } else {
+        existingTx = generalFundTransactions || [];
+      }
+      const nextTx = [newTx, ...existingTx.filter(t => t.id !== newTx.id)];
+      await setDoc(docRef, { generalFundTransactions: nextTx }, { merge: true });
       setGeneralFundTransactions(nextTx);
       setNewFundAmount("");
       setNewFundNotes("");
       setSuccessMsg("Transaction saved to General Fund.");
     } catch (err) {
-      // In case the document doesn't exist yet, try setDoc
-      try {
-        await setDoc(doc(db, "settings", "general"), { generalFundTransactions: nextTx }, { merge: true });
-        setGeneralFundTransactions(nextTx);
-        setNewFundAmount("");
-        setNewFundNotes("");
-        setSuccessMsg("Transaction saved to General Fund.");
-      } catch (innerErr) {
-        handleFirestoreError(innerErr, OperationType.WRITE, "settings/general");
-        setErrorMsg("Failed to add transaction.");
-      }
+      handleFirestoreError(err, OperationType.WRITE, "settings/general");
+      setErrorMsg("Failed to add transaction.");
     } finally {
       setLoading(false);
     }
@@ -157,21 +172,29 @@ export default function AdminSettings({
     if (!currentUser || currentUser.role !== "admin") return;
     if (!window.confirm("Are you sure you want to delete this transaction from the General Fund ledger?")) return;
 
-    const nextTx = generalFundTransactions.filter(t => t.id !== txId);
-    
     if (currentUser.isOfflineMock) {
-      setGeneralFundTransactions(nextTx);
       const stored = localStorage.getItem("axotic_mock_general_settings");
       let parsed = stored ? JSON.parse(stored) : {};
+      const currentStoredTx: GeneralFundTransaction[] = Array.isArray(parsed.generalFundTransactions) ? parsed.generalFundTransactions : (generalFundTransactions || []);
+      const nextTx = currentStoredTx.filter(t => t.id !== txId);
       parsed.generalFundTransactions = nextTx;
       localStorage.setItem("axotic_mock_general_settings", JSON.stringify(parsed));
+      setGeneralFundTransactions(nextTx);
+      window.dispatchEvent(new Event("axotic_db_update"));
       return;
     }
 
     try {
-      await updateDoc(doc(db, "settings", "general"), {
-        generalFundTransactions: nextTx
-      });
+      const docRef = doc(db, "settings", "general");
+      const snap = await getDoc(docRef);
+      let existingTx: GeneralFundTransaction[] = [];
+      if (snap.exists() && snap.data()?.generalFundTransactions && Array.isArray(snap.data().generalFundTransactions)) {
+        existingTx = snap.data().generalFundTransactions;
+      } else {
+        existingTx = generalFundTransactions || [];
+      }
+      const nextTx = existingTx.filter(t => t.id !== txId);
+      await setDoc(docRef, { generalFundTransactions: nextTx }, { merge: true });
       setGeneralFundTransactions(nextTx);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "settings/general");
@@ -190,8 +213,24 @@ export default function AdminSettings({
   const [userSearch, setUserSearch] = useState("");
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserProfile | null>(null);
   
+  // Custom Roles state
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>(DEFAULT_CUSTOM_ROLES);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [roleToEdit, setRoleToEdit] = useState<CustomRole | null>(null);
+  const [roleNameInput, setRoleNameInput] = useState("");
+  const [roleDescInput, setRoleDescInput] = useState("");
+  const [roleColorInput, setRoleColorInput] = useState<CustomRole["color"]>("blue");
+  const [roleClearanceInput, setRoleClearanceInput] = useState<UserRole>("member");
+  const [rolePermissionsInput, setRolePermissionsInput] = useState<PermissionKey[]>(["manage_ideas"]);
+  const [roleMemberSearch, setRoleMemberSearch] = useState("");
+  const [divisionTags, setDivisionTags] = useState<string[]>(DEFAULT_DIVISION_TAGS);
+  const [newDivisionTagInput, setNewDivisionTagInput] = useState("");
+  const [specialtyTags, setSpecialtyTags] = useState<string[]>(DEFAULT_SPECIALTY_TAGS);
+  const [newSpecialtyTagInput, setNewSpecialtyTagInput] = useState("");
+
   // User edit state fields
   const [editRole, setEditRole] = useState<UserRole>("member");
+  const [editCustomRoleId, setEditCustomRoleId] = useState<string>("core_engineer");
   const [editSubTeam, setEditSubTeam] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
@@ -451,6 +490,9 @@ export default function AdminSettings({
         try {
           const p = JSON.parse(storedGen);
           if (p.generalFundTransactions) setGeneralFundTransactions(p.generalFundTransactions);
+          if (p.customRoles && Array.isArray(p.customRoles) && p.customRoles.length > 0) setCustomRoles(p.customRoles);
+          if (p.divisionTags && Array.isArray(p.divisionTags) && p.divisionTags.length > 0) setDivisionTags(p.divisionTags);
+          if (p.specialtyTags && Array.isArray(p.specialtyTags) && p.specialtyTags.length > 0) setSpecialtyTags(p.specialtyTags);
         } catch(e) {}
       }
     } else {
@@ -461,6 +503,9 @@ export default function AdminSettings({
           if (data.logoUrl) setLogoUrl(data.logoUrl === "/AXOTIC Logo-1.png" ? "/logo.png" : data.logoUrl);
           if (data.returnPeriod) setReturnPeriod(data.returnPeriod);
           if (data.generalFundTransactions) setGeneralFundTransactions(data.generalFundTransactions);
+          if (data.customRoles && Array.isArray(data.customRoles) && data.customRoles.length > 0) setCustomRoles(data.customRoles);
+          if (data.divisionTags && Array.isArray(data.divisionTags) && data.divisionTags.length > 0) setDivisionTags(data.divisionTags);
+          if (data.specialtyTags && Array.isArray(data.specialtyTags) && data.specialtyTags.length > 0) setSpecialtyTags(data.specialtyTags);
           if (data.allowPublicVisibility !== undefined) setAllowPublicVisibility(data.allowPublicVisibility);
         }
       }, (err) => {
@@ -497,7 +542,9 @@ export default function AdminSettings({
             subTeams: d.subTeams || defaultPublicLandingData.subTeams,
             buildSpecs: d.buildSpecs || defaultPublicLandingData.buildSpecs,
             trackRecords: d.trackRecords || defaultPublicLandingData.trackRecords,
+            achievements: d.achievements || defaultPublicLandingData.achievements,
             galleryPhotos: d.galleryPhotos || defaultPublicLandingData.galleryPhotos,
+            showAchievements: d.showAchievements !== undefined ? d.showAchievements : true,
           } as PublicLandingData);
         } else {
           setPublicPageData(defaultPublicLandingData);
@@ -535,6 +582,110 @@ export default function AdminSettings({
         setSavingPublicPage(false);
       }
     }
+  };
+
+  const handleUploadAchievementPhoto = (achIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Only image files (JPEG, PNG, WEBP, SVG) are allowed.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_SIZE = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          
+          if (publicPageData) {
+            const list = [...(publicPageData.achievements || [])];
+            list[achIndex] = { ...list[achIndex], imageUrl: dataUrl };
+            setPublicPageData({ ...publicPageData, achievements: list });
+          }
+        }
+      };
+      img.src = readerEvent.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleUploadBuildPhoto = (buildIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Only image files (JPEG, PNG, WEBP, SVG) are allowed.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_SIZE = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          
+          if (publicPageData) {
+            const list = [...publicPageData.buildSpecs];
+            const currentUrls = list[buildIndex].imageUrl ? list[buildIndex].imageUrl.split(',').map(s => s.trim()).filter(Boolean) : [];
+            currentUrls.push(dataUrl);
+            list[buildIndex] = { ...list[buildIndex], imageUrl: currentUrls.join(', ') };
+            setPublicPageData({ ...publicPageData, buildSpecs: list });
+          }
+        }
+      };
+      img.src = readerEvent.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   // Load Users Roster dynamically
@@ -652,8 +803,325 @@ export default function AdminSettings({
   const handleSelectUserForEdit = (user: UserProfile) => {
     setSelectedUserForEdit(user);
     setEditRole(user.role);
-    setEditSubTeam(user.subTeam || "Core Engineering");
+    setEditCustomRoleId(user.customRoleId || (user.role === "admin" ? "admin" : "core_engineer"));
+    setEditSubTeam(user.subTeam || (divisionTags[0] || "Software & Autonomy"));
     setEditPhone(user.phoneNumber || "");
+  };
+
+  // Save custom role definition
+  const handleSaveCustomRole = async () => {
+    if (!roleNameInput.trim()) {
+      setErrorMsg("Role name is required.");
+      return;
+    }
+
+    let updatedList: CustomRole[] = [];
+    if (roleToEdit) {
+      updatedList = customRoles.map(r => 
+        r.id === roleToEdit.id 
+          ? { 
+              ...r, 
+              name: roleNameInput.trim(), 
+              description: roleDescInput.trim(), 
+              color: roleColorInput, 
+              clearance: roleClearanceInput,
+              permissions: rolePermissionsInput
+            }
+          : r
+      );
+    } else {
+      const newRole: CustomRole = {
+        id: "role-" + Date.now(),
+        name: roleNameInput.trim(),
+        description: roleDescInput.trim(),
+        color: roleColorInput,
+        clearance: roleClearanceInput,
+        permissions: rolePermissionsInput,
+        isSystem: false
+      };
+      updatedList = [...customRoles, newRole];
+    }
+
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.customRoles = updatedList;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+      setCustomRoles(updatedList);
+      setIsRoleModalOpen(false);
+      setRoleToEdit(null);
+      setSuccessMsg(`Successfully saved role "${roleNameInput}".`);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await updateDoc(doc(db, "settings", "general"), {
+        customRoles: updatedList
+      }).catch(async () => {
+        await setDoc(doc(db, "settings", "general"), { customRoles: updatedList }, { merge: true });
+      });
+      setCustomRoles(updatedList);
+      setIsRoleModalOpen(false);
+      setRoleToEdit(null);
+      setSuccessMsg(`Successfully saved role "${roleNameInput}".`);
+      createAdminLog("ROLE_CONFIGURED", `Configured role "${roleNameInput}" (Clearance: ${roleClearanceInput}, Permissions: ${rolePermissionsInput.length}).`, currentUser);
+    } catch (err) {
+      setErrorMsg("Failed to save custom role.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete custom role definition
+  const handleDeleteCustomRole = async (roleId: string) => {
+    const role = customRoles.find(r => r.id === roleId);
+    if (!role) return;
+
+    // Safety guard: ensure at least one admin clearance role remains
+    const adminRoles = customRoles.filter(r => r.clearance === "admin");
+    if (role.clearance === "admin" && adminRoles.length <= 1) {
+      setErrorMsg("Cannot delete the only administrative role. At least one Admin role must exist.");
+      return;
+    }
+
+    const updatedList = customRoles.filter(r => r.id !== roleId);
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.customRoles = updatedList;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+      setCustomRoles(updatedList);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg(`Deleted role "${role.name}".`);
+      return;
+    }
+    try {
+      setLoading(true);
+      await updateDoc(doc(db, "settings", "general"), {
+        customRoles: updatedList
+      });
+      setCustomRoles(updatedList);
+      setSuccessMsg(`Deleted role "${role.name}".`);
+      createAdminLog("ROLE_DELETED", `Removed role designation "${role.name}".`, currentUser);
+    } catch (err) {
+      setErrorMsg("Failed to delete role.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset roles & tags back to defaults
+  const handleResetRolesToDefaults = async () => {
+    const defaultList = DEFAULT_CUSTOM_ROLES;
+    const defaultTags = DEFAULT_DIVISION_TAGS;
+    const defaultSpecialties = DEFAULT_SPECIALTY_TAGS;
+
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.customRoles = defaultList;
+      p.divisionTags = defaultTags;
+      p.specialtyTags = defaultSpecialties;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+      setCustomRoles(defaultList);
+      setDivisionTags(defaultTags);
+      setSpecialtyTags(defaultSpecialties);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg("Restored default roles, specialty tags, and division tags.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await setDoc(doc(db, "settings", "general"), {
+        customRoles: defaultList,
+        divisionTags: defaultTags,
+        specialtyTags: defaultSpecialties
+      }, { merge: true });
+      setCustomRoles(defaultList);
+      setDivisionTags(defaultTags);
+      setSpecialtyTags(defaultSpecialties);
+      setSuccessMsg("Restored default roles, specialty tags, and division tags.");
+      createAdminLog("ROLES_RESET", "Restored system default role designations, specialty tags, and division tags.", currentUser);
+    } catch (err) {
+      setErrorMsg("Failed to restore default roles.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Manage Division Tags
+  const handleAddDivisionTag = async (newTag: string) => {
+    const trimmed = newTag.trim();
+    if (!trimmed) return;
+    if (divisionTags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+      setErrorMsg(`Division tag "${trimmed}" already exists.`);
+      return;
+    }
+    const updatedTags = [...divisionTags, trimmed];
+    await saveDivisionTags(updatedTags);
+    setNewDivisionTagInput("");
+  };
+
+  const handleDeleteDivisionTag = async (tagToDelete: string) => {
+    const updatedTags = divisionTags.filter(t => t !== tagToDelete);
+    await saveDivisionTags(updatedTags);
+  };
+
+  const saveDivisionTags = async (updatedTags: string[]) => {
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.divisionTags = updatedTags;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+      setDivisionTags(updatedTags);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg("Updated engineering division tags.");
+      return;
+    }
+    try {
+      setLoading(true);
+      await setDoc(doc(db, "settings", "general"), {
+        divisionTags: updatedTags
+      }, { merge: true });
+      setDivisionTags(updatedTags);
+      setSuccessMsg("Updated engineering division tags.");
+      createAdminLog("DIVISION_TAGS_UPDATED", `Updated division tags: ${updatedTags.join(", ")}`, currentUser);
+    } catch (err) {
+      setErrorMsg("Failed to save division tags.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Manage Technical Specialty Tags
+  const handleAddSpecialtyTag = async (newTag: string) => {
+    const trimmed = newTag.trim();
+    if (!trimmed) return;
+    if (specialtyTags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+      setErrorMsg(`Specialty tag "${trimmed}" already exists.`);
+      return;
+    }
+    const updatedTags = [...specialtyTags, trimmed];
+    await saveSpecialtyTags(updatedTags);
+    setNewSpecialtyTagInput("");
+  };
+
+  const handleDeleteSpecialtyTag = async (tagToDelete: string) => {
+    const updatedTags = specialtyTags.filter(t => t !== tagToDelete);
+    await saveSpecialtyTags(updatedTags);
+  };
+
+  const saveSpecialtyTags = async (updatedTags: string[]) => {
+    if (currentUser.isOfflineMock) {
+      const storedGen = localStorage.getItem("axotic_mock_general_settings");
+      let p = storedGen ? JSON.parse(storedGen) : {};
+      p.specialtyTags = updatedTags;
+      localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+      setSpecialtyTags(updatedTags);
+      window.dispatchEvent(new Event("axotic_db_update"));
+      setSuccessMsg("Updated technical specialty tags.");
+      return;
+    }
+    try {
+      setLoading(true);
+      await setDoc(doc(db, "settings", "general"), {
+        specialtyTags: updatedTags
+      }, { merge: true });
+      setSpecialtyTags(updatedTags);
+      setSuccessMsg("Updated technical specialty tags.");
+      createAdminLog("SPECIALTY_TAGS_UPDATED", `Updated specialty tags: ${updatedTags.join(", ")}`, currentUser);
+    } catch (err) {
+      setErrorMsg("Failed to save specialty tags.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick assign role to member from table
+  const handleQuickAssignRole = async (targetUser: UserProfile, roleId: string) => {
+    const chosenRole = customRoles.find(r => r.id === roleId);
+    if (!chosenRole) return;
+
+    if (currentUser.isOfflineMock) {
+      const stored = localStorage.getItem("axotic_mock_roster");
+      if (stored) {
+        const list: UserProfile[] = JSON.parse(stored);
+        const idx = list.findIndex(u => u.uid === targetUser.uid);
+        if (idx !== -1) {
+          list[idx] = {
+            ...list[idx],
+            role: chosenRole.clearance,
+            customRoleId: chosenRole.id,
+            customRoleName: chosenRole.name
+          };
+          localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
+          if (currentUser.uid === targetUser.uid) {
+            localStorage.setItem("axotic_local_auth", JSON.stringify(list[idx]));
+          }
+          setRoster(list);
+          window.dispatchEvent(new Event("axotic_db_update"));
+          setSuccessMsg(`Assigned role "${chosenRole.name}" to ${targetUser.displayName}.`);
+          setTimeout(() => setSuccessMsg(""), 4000);
+        }
+      }
+      return;
+    }
+
+    try {
+      const userRef = doc(db, "users", targetUser.uid);
+      await updateDoc(userRef, {
+        role: chosenRole.clearance,
+        customRoleId: chosenRole.id,
+        customRoleName: chosenRole.name
+      });
+      createAdminLog("ROLE_ASSIGNED", `Assigned role "${chosenRole.name}" to ${targetUser.displayName}.`, currentUser);
+      setSuccessMsg(`Assigned role "${chosenRole.name}" to ${targetUser.displayName}.`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (err) {
+      setErrorMsg("Failed to update member role.");
+      setTimeout(() => setErrorMsg(""), 4000);
+    }
+  };
+
+  // Quick update sub-team division tag
+  const handleQuickUpdateSubTeam = async (targetUser: UserProfile, newSubTeam: string) => {
+    if (currentUser.isOfflineMock) {
+      const stored = localStorage.getItem("axotic_mock_roster");
+      if (stored) {
+        const list: UserProfile[] = JSON.parse(stored);
+        const idx = list.findIndex(u => u.uid === targetUser.uid);
+        if (idx !== -1) {
+          list[idx] = {
+            ...list[idx],
+            subTeam: newSubTeam.trim()
+          };
+          localStorage.setItem("axotic_mock_roster", JSON.stringify(list));
+          if (currentUser.uid === targetUser.uid) {
+            localStorage.setItem("axotic_local_auth", JSON.stringify(list[idx]));
+          }
+          setRoster(list);
+          window.dispatchEvent(new Event("axotic_db_update"));
+          setSuccessMsg(`Updated division tag to "${newSubTeam}".`);
+          setTimeout(() => setSuccessMsg(""), 4000);
+        }
+      }
+      return;
+    }
+
+    try {
+      const userRef = doc(db, "users", targetUser.uid);
+      await updateDoc(userRef, {
+        subTeam: newSubTeam.trim()
+      });
+      setSuccessMsg(`Updated division tag to "${newSubTeam}".`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (err) {
+      setErrorMsg("Failed to update division tag.");
+      setTimeout(() => setErrorMsg(""), 4000);
+    }
   };
 
   // Save modified user profile properties
@@ -666,6 +1134,9 @@ export default function AdminSettings({
     setSuccessMsg("");
 
     const targetUid = selectedUserForEdit.uid;
+    const chosenRole = customRoles.find(r => r.id === editCustomRoleId);
+    const finalClearance: UserRole = chosenRole ? chosenRole.clearance : editRole;
+    const finalRoleName = chosenRole ? chosenRole.name : (finalClearance === "admin" ? "Team Lead & Admin" : "Member");
 
     if (currentUser.isOfflineMock) {
       const stored = localStorage.getItem("axotic_mock_roster");
@@ -676,14 +1147,16 @@ export default function AdminSettings({
           if (idx !== -1) {
             rosterList[idx] = {
               ...rosterList[idx],
-              role: editRole,
-              subTeam: editSubTeam,
-              phoneNumber: editPhone
+              role: finalClearance,
+              customRoleId: chosenRole ? chosenRole.id : undefined,
+              customRoleName: finalRoleName,
+              subTeam: editSubTeam.trim(),
+              phoneNumber: editPhone.trim()
             };
             localStorage.setItem("axotic_mock_roster", JSON.stringify(rosterList));
             createAdminLog(
               "USER_OVERRIDE",
-              `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${editRole}", department set to "${editSubTeam}", contact: "${editPhone}".`,
+              `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${finalRoleName}", department set to "${editSubTeam}", contact: "${editPhone}".`,
               currentUser
             );
             window.dispatchEvent(new Event("axotic_db_update"));
@@ -697,13 +1170,15 @@ export default function AdminSettings({
       try {
         const userRef = doc(db, "users", targetUid);
         await updateDoc(userRef, {
-          role: editRole,
-          subTeam: editSubTeam,
-          phoneNumber: editPhone
+          role: finalClearance,
+          customRoleId: chosenRole ? chosenRole.id : undefined,
+          customRoleName: finalRoleName,
+          subTeam: editSubTeam.trim(),
+          phoneNumber: editPhone.trim()
         });
         createAdminLog(
           "USER_OVERRIDE",
-          `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${editRole}", department set to "${editSubTeam}", contact: "${editPhone}".`,
+          `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${finalRoleName}", department set to "${editSubTeam}", contact: "${editPhone}".`,
           currentUser
         );
         setSuccessMsg(`Successfully saved administrative profile changes for ${selectedUserForEdit.displayName}.`);
@@ -953,6 +1428,18 @@ export default function AdminSettings({
           </button>
           <button
             type="button"
+            onClick={() => setActiveSubTab("roles")}
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "roles"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-roles"
+          >
+            <ShieldCheck className="size-3.5 text-blue-400" /> Member Roles & Permissions
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveSubTab("onboard")}
             className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeSubTab === "onboard"
@@ -986,6 +1473,18 @@ export default function AdminSettings({
             id="btn-subnav-preferences"
           >
             <User className="size-3.5" /> My Preferences
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("treasury")}
+            className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === "treasury"
+                ? "bg-slate-900 text-white shadow-xs dark:bg-slate-950"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
+            }`}
+            id="btn-subnav-treasury"
+          >
+            <Banknote className="size-3.5 text-emerald-400" /> General Fund & Treasury
           </button>
           <button
             type="button"
@@ -1350,17 +1849,43 @@ export default function AdminSettings({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Clearance Role</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Assigned Role</label>
                     <select
-                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-1.8 outline-hidden cursor-pointer font-semibold"
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value as UserRole)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-2 outline-hidden cursor-pointer font-bold text-slate-700"
+                      value={editCustomRoleId}
+                      onChange={(e) => {
+                        const chosen = customRoles.find(r => r.id === e.target.value);
+                        setEditCustomRoleId(e.target.value);
+                        if (chosen) {
+                          setEditRole(chosen.clearance);
+                        }
+                      }}
                     >
-                      <option value="member">Member</option>
-                      <option value="admin">Administrator (Full Master Auth)</option>
+                      {customRoles.map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.clearance === "admin" ? "Admin Clearance" : "Member"})
+                        </option>
+                      ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Sub-Team Division / Tag</label>
+                    <input
+                      type="text"
+                      list="subteam-presets"
+                      placeholder="e.g. Software & Autonomy, Hardware & Electronics"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 text-xs rounded-lg px-2.5 py-2 outline-hidden font-semibold text-slate-700"
+                      value={editSubTeam}
+                      onChange={(e) => setEditSubTeam(e.target.value)}
+                    />
+                    <datalist id="subteam-presets">
+                      {divisionTags.map(tag => (
+                        <option key={tag} value={tag} />
+                      ))}
+                    </datalist>
                   </div>
                 </div>
 
@@ -1402,6 +1927,701 @@ export default function AdminSettings({
       </div>
       )}
 
+      {/* ROLES & PERMISSIONS MANAGEMENT SUBTAB */}
+      {activeSubTab === "roles" && (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          
+          {/* HEADER BANNER */}
+          <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2 z-10 text-left">
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest block font-mono">Team Architecture & Governance</span>
+              <h2 className="font-display text-2xl font-black tracking-tight flex items-center gap-2.5">
+                <ShieldCheck className="size-6 text-blue-400" /> Member Roles & Permissions
+              </h2>
+              <p className="text-xs text-slate-400 font-sans max-w-xl leading-relaxed">
+                Customize official team designations, authorization clearances, and engineering division tags (like Software, Hardware, Mechanical, and Robotics Specialists). Assign roles to team members directly.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 z-10 self-start md:self-auto">
+              <button
+                type="button"
+                onClick={handleResetRolesToDefaults}
+                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-all border border-slate-700/80 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Restore default role designations and division tags"
+              >
+                <RefreshCw className="size-3.5 text-slate-400" />
+                <span>Reset to Defaults</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleToEdit(null);
+                  setRoleNameInput("");
+                  setRoleDescInput("");
+                  setRoleColorInput("blue");
+                  setRoleClearanceInput("member");
+                  setRolePermissionsInput(["manage_ideas"]);
+                  setIsRoleModalOpen(true);
+                }}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer"
+              >
+                <UserPlus className="size-4" />
+                <span>Create New Role</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ROLE DEFINITIONS CARDS */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-extrabold text-sm text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Palette className="size-4 text-blue-600" /> Active Role Designations ({customRoles.length})
+              </h3>
+              <span className="text-xs text-slate-400 font-medium">Click Edit to customize role details and granular permissions</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5">
+              {customRoles.map((role) => {
+                const membersWithRole = roster.filter(u => 
+                  u.customRoleId === role.id || 
+                  (u.customRoleName && u.customRoleName.toLowerCase() === role.name.toLowerCase()) ||
+                  (!u.customRoleId && !u.customRoleName && (role.id === "admin" ? u.role === "admin" : (role.id === "core_engineer" && u.role === "member")))
+                );
+
+                const colors = ROLE_COLOR_MAP[role.color] || ROLE_COLOR_MAP.blue;
+                const isOnlyAdmin = role.clearance === "admin" && customRoles.filter(r => r.clearance === "admin").length <= 1;
+                const permCount = role.permissions ? role.permissions.length : (role.clearance === "admin" ? ALL_PERMISSIONS.length : (role.clearance === "moderator" ? 6 : 1));
+
+                return (
+                  <div 
+                    key={role.id}
+                    className={`bg-white rounded-2xl border-t-4 border border-slate-200/80 p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between ${colors.border}`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <span className={`px-2.5 py-1 text-[10px] font-bold font-mono uppercase tracking-wider rounded-lg border flex items-center gap-1.5 ${colors.badge}`}>
+                          <span className={`size-1.5 rounded-full ${colors.dot}`} />
+                          {role.name}
+                        </span>
+                        <span className={`px-2 py-0.5 text-[8.5px] font-extrabold uppercase tracking-widest rounded-md border font-mono ${
+                          role.clearance === "admin" 
+                            ? "bg-rose-50 text-rose-700 border-rose-200" 
+                            : role.clearance === "moderator"
+                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                            : "bg-slate-50 text-slate-600 border-slate-200"
+                        }`}>
+                          {role.clearance === "admin" ? "Master Admin" : role.clearance === "moderator" ? "Moderator" : "Standard"}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-500 font-medium leading-relaxed mb-3 min-h-[34px]">
+                        {role.description || "Official engineering role for Team AXOTIC."}
+                      </p>
+
+                      {/* Permissions Summary Pill */}
+                      <div className="mb-3.5 flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/70 text-[10px] font-bold text-slate-600 font-mono">
+                          <ShieldCheck className="size-3 text-blue-600" />
+                          {permCount} / {ALL_PERMISSIONS.length} Permissions
+                        </span>
+                        {role.clearance === "admin" && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-50 border border-rose-100 text-[9px] font-extrabold text-rose-600 uppercase font-mono">
+                            Full Access
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex -space-x-1.5">
+                          {membersWithRole.slice(0, 4).map(m => (
+                            <img 
+                              key={m.uid} 
+                              src={m.avatarUrl || undefined} 
+                              alt={m.displayName}
+                              title={m.displayName}
+                              className="size-6 rounded-full border-2 border-white object-cover bg-slate-100" 
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-600 font-mono">
+                          {membersWithRole.length} member{membersWithRole.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setRoleToEdit(role);
+                            setRoleNameInput(role.name);
+                            setRoleDescInput(role.description || "");
+                            setRoleColorInput(role.color);
+                            setRoleClearanceInput(role.clearance);
+                            setRolePermissionsInput(
+                              role.permissions && Array.isArray(role.permissions)
+                                ? role.permissions
+                                : (role.clearance === "admin" 
+                                    ? ALL_PERMISSIONS.map(p => p.key) 
+                                    : role.clearance === "moderator"
+                                    ? ["manage_projects", "manage_inventory", "manage_competitions", "manage_ideas", "manage_tags", "manage_members"]
+                                    : ["manage_ideas"])
+                            );
+                            setIsRoleModalOpen(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Role & Permissions"
+                        >
+                          <Edit2 className="size-3.5" />
+                        </button>
+                        {!isOnlyAdmin && (
+                          <button
+                            onClick={() => handleDeleteCustomRole(role.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Role Designation"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* TECHNICAL SPECIALTY TAGS SECTION */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs space-y-4 text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <Sparkles className="size-4.5 text-purple-600" /> Technical Specialty Tags ({specialtyTags.length})
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Customizable engineering specialty competencies (e.g. ROS 2, PCB Design, Computer Vision, SLAM) assigned to members and project builder skillsets.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => saveSpecialtyTags(DEFAULT_SPECIALTY_TAGS)}
+                className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              >
+                <RefreshCw className="size-3 text-slate-400" />
+                <span>Reset Specialties</span>
+              </button>
+            </div>
+
+            {/* Specialty Tags Flow */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {specialtyTags.map(tag => {
+                const memberCount = roster.filter(u => 
+                  u.specifications && u.specifications.toLowerCase().includes(tag.toLowerCase())
+                ).length;
+
+                return (
+                  <div 
+                    key={tag}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-purple-200/80 bg-purple-50/60 text-purple-900 text-xs font-semibold hover:bg-purple-50 transition-all shadow-2xs"
+                  >
+                    <span className="size-2 rounded-full bg-purple-500" />
+                    <span className="font-bold">{tag}</span>
+                    <span className="px-1.5 py-0.2 bg-white/90 border border-purple-200 rounded-md text-[10px] font-mono text-purple-700">
+                      {memberCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSpecialtyTag(tag)}
+                      className="p-0.5 text-purple-400 hover:text-rose-600 rounded transition-colors cursor-pointer ml-0.5"
+                      title={`Remove "${tag}" specialty tag`}
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Add Specialty Tag Form */}
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 max-w-md">
+              <input
+                type="text"
+                value={newSpecialtyTagInput}
+                onChange={(e) => setNewSpecialtyTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddSpecialtyTag(newSpecialtyTagInput);
+                  }
+                }}
+                placeholder="Add new technical specialty tag (e.g. Kinematics, SLAM)..."
+                className="flex-1 bg-slate-50 border border-slate-200 focus:border-purple-500 rounded-xl px-3 py-1.8 text-xs font-medium outline-hidden text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={() => handleAddSpecialtyTag(newSpecialtyTagInput)}
+                disabled={!newSpecialtyTagInput.trim()}
+                className="px-3.5 py-1.8 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Plus className="size-3.5" />
+                <span>Add Specialty</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ENGINEERING DIVISION TAGS SECTION */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs space-y-4 text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <Tag className="size-4.5 text-blue-600" /> Engineering Division Tags ({divisionTags.length})
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Official engineering sub-team tags associated with members and project milestones.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => saveDivisionTags(DEFAULT_DIVISION_TAGS)}
+                className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              >
+                <RefreshCw className="size-3 text-slate-400" />
+                <span>Reset Divisions</span>
+              </button>
+            </div>
+
+            {/* Tags Pills Flow */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {divisionTags.map(tag => {
+                const memberCount = roster.filter(u => (u.subTeam || "").toLowerCase() === tag.toLowerCase()).length;
+
+                return (
+                  <div 
+                    key={tag}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-blue-200/70 bg-blue-50/50 text-blue-900 text-xs font-semibold hover:bg-blue-50 transition-all shadow-2xs"
+                  >
+                    <span className="size-2 rounded-full bg-blue-500" />
+                    <span className="font-bold">{tag}</span>
+                    <span className="px-1.5 py-0.2 bg-white/90 border border-blue-200 rounded-md text-[10px] font-mono text-blue-700">
+                      {memberCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDivisionTag(tag)}
+                      className="p-0.5 text-blue-400 hover:text-rose-600 rounded transition-colors cursor-pointer ml-0.5"
+                      title={`Remove "${tag}" tag`}
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Add Division Tag Form */}
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 max-w-md">
+              <input
+                type="text"
+                value={newDivisionTagInput}
+                onChange={(e) => setNewDivisionTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddDivisionTag(newDivisionTagInput);
+                  }
+                }}
+                placeholder="Add new engineering division tag..."
+                className="flex-1 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-1.8 text-xs font-medium outline-hidden text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={() => handleAddDivisionTag(newDivisionTagInput)}
+                disabled={!newDivisionTagInput.trim()}
+                className="px-3.5 py-1.8 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Plus className="size-3.5" />
+                <span>Add Tag</span>
+              </button>
+            </div>
+          </div>
+
+          {/* MEMBER ROLE ASSIGNMENT TABLE */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs space-y-5 text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-display font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <Users className="size-4.5 text-blue-600" /> Member Role & Division Matrix
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Quickly reassign roles or update division tags with live synchronization.</p>
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name, role, email..."
+                  value={roleMemberSearch}
+                  onChange={(e) => setRoleMemberSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-1.5 text-xs outline-hidden text-slate-700 font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-100 rounded-xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Member</th>
+                    <th className="py-3 px-4">Role Designation</th>
+                    <th className="py-3 px-4">Division / Tag</th>
+                    <th className="py-3 px-4">Clearance</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {roster
+                    .filter(u => {
+                      if (!roleMemberSearch.trim()) return true;
+                      const q = roleMemberSearch.toLowerCase();
+                      return (
+                        u.displayName.toLowerCase().includes(q) ||
+                        u.email.toLowerCase().includes(q) ||
+                        (u.customRoleName && u.customRoleName.toLowerCase().includes(q)) ||
+                        (u.subTeam && u.subTeam.toLowerCase().includes(q))
+                      );
+                    })
+                    .map(member => {
+                      const currentRoleId = member.customRoleId || (member.role === "admin" ? "admin" : (member.role === "moderator" ? "moderator" : "core_engineer"));
+
+                      return (
+                        <tr key={member.uid} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <img 
+                                src={member.avatarUrl || undefined} 
+                                alt="" 
+                                className="size-8 rounded-lg bg-slate-100 object-cover border border-slate-200" 
+                              />
+                              <div>
+                                <span className="font-bold text-slate-800 block">{member.displayName}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{member.email}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <select
+                              value={currentRoleId}
+                              onChange={(e) => handleQuickAssignRole(member, e.target.value)}
+                              className="bg-slate-50 hover:bg-white border border-slate-200 focus:border-blue-500 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-hidden cursor-pointer"
+                            >
+                              {customRoles.map(r => (
+                                <option key={r.id} value={r.id}>
+                                  {r.name} ({r.clearance === "admin" ? "Admin" : r.clearance === "moderator" ? "Moderator" : "Member"})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                list="matrix-subteam-presets"
+                                value={member.subTeam || ""}
+                                placeholder="Division tag..."
+                                onChange={(e) => handleQuickUpdateSubTeam(member, e.target.value)}
+                                className="bg-slate-50 hover:bg-white border border-slate-200 focus:border-blue-500 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-hidden w-44"
+                              />
+                              <datalist id="matrix-subteam-presets">
+                                {divisionTags.map(tag => (
+                                  <option key={tag} value={tag} />
+                                ))}
+                              </datalist>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 text-[9px] font-bold font-mono uppercase tracking-wider rounded-md border ${
+                              member.role === "admin" 
+                                ? "bg-rose-50 text-rose-700 border-rose-200" 
+                                : member.role === "moderator"
+                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                : "bg-slate-50 text-slate-600 border-slate-200"
+                            }`}>
+                              {member.role}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => {
+                                handleSelectUserForEdit(member);
+                                setActiveSubTab("general");
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Edit Profile
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ROLE CREATION / EDITING MODAL WITH GRANULAR PERMISSIONS */}
+          {isRoleModalOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 max-w-2xl w-full shadow-2xl space-y-5 text-left animate-in fade-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                      <ShieldCheck className="size-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-display font-black text-lg text-slate-900 leading-tight">
+                        {roleToEdit ? `Edit Role: ${roleToEdit.name}` : "Create Custom Role"}
+                      </h3>
+                      <p className="text-xs text-slate-400">Configure role branding, clearance tier, and granular permission capabilities.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsRoleModalOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-5 overflow-y-auto pr-1 flex-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Role Title / Designation</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Lead Firmware Engineer, Operations Moderator"
+                        value={roleNameInput}
+                        onChange={(e) => setRoleNameInput(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Badge Color Palette</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(["rose", "blue", "purple", "emerald", "amber", "cyan", "indigo", "slate"] as const).map(color => {
+                          const isSelected = roleColorInput === color;
+                          const colStyle = ROLE_COLOR_MAP[color] || ROLE_COLOR_MAP.blue;
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => setRoleColorInput(color)}
+                              className={`p-1.5 rounded-lg border text-[10px] font-bold capitalize flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                isSelected 
+                                  ? "ring-2 ring-blue-500 border-blue-400 " + colStyle.badge
+                                  : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                              }`}
+                            >
+                              <span className={`size-1.5 rounded-full ${colStyle.dot}`} />
+                              <span>{color}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Description & Responsibilities</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Describe what members holding this role are responsible for..."
+                      value={roleDescInput}
+                      onChange={(e) => setRoleDescInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-700 outline-hidden resize-none"
+                    />
+                  </div>
+
+                  {/* 3-TIER SYSTEM CLEARANCE AUTHORITY */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">System Clearance Authority Tier</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRoleClearanceInput("member");
+                          setRolePermissionsInput(["manage_ideas"]);
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          roleClearanceInput === "member"
+                            ? "bg-slate-50 border-slate-400 ring-2 ring-slate-400/30"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="font-bold text-xs text-slate-800 block">Standard Member</span>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">Project builds and collaborative ideas</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRoleClearanceInput("moderator");
+                          setRolePermissionsInput([
+                            "manage_projects",
+                            "manage_inventory",
+                            "manage_competitions",
+                            "manage_ideas",
+                            "manage_tags",
+                            "manage_members"
+                          ]);
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          roleClearanceInput === "moderator"
+                            ? "bg-purple-50/80 border-purple-400 ring-2 ring-purple-500/30"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="font-bold text-xs text-purple-900 block">Operations Moderator</span>
+                        <span className="text-[10px] text-purple-700 block mt-0.5">Operations, projects, parts & competitions</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRoleClearanceInput("admin");
+                          setRolePermissionsInput(ALL_PERMISSIONS.map(p => p.key));
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          roleClearanceInput === "admin"
+                            ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-500/30"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="font-bold text-xs text-rose-900 block">Master Admin</span>
+                        <span className="text-[10px] text-rose-700 block mt-0.5">Master governance, treasury & security logs</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* GRANULAR PERMISSIONS CHECKLIST */}
+                  <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4.5 space-y-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                      <div>
+                        <h4 className="font-display font-extrabold text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <ShieldCheck className="size-4 text-blue-600" />
+                          Granular Permission Matrix ({rolePermissionsInput.length} Granted)
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Toggle specific capabilities allowed for members with this role.</p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setRolePermissionsInput(ALL_PERMISSIONS.map(p => p.key))}
+                          className="px-2 py-1 rounded bg-white hover:bg-blue-50 border border-slate-200 text-blue-600 font-bold text-[10px] cursor-pointer"
+                        >
+                          Grant All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRolePermissionsInput([])}
+                          className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[10px] cursor-pointer"
+                        >
+                          Revoke All
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Permissions Grouped by Category */}
+                    {(["Administration", "Robotics Operations", "Knowledge & Community"] as const).map(cat => {
+                      const permsInCat = ALL_PERMISSIONS.filter(p => p.category === cat);
+                      return (
+                        <div key={cat} className="space-y-2">
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">
+                            {cat}
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {permsInCat.map(perm => {
+                              const isChecked = rolePermissionsInput.includes(perm.key);
+                              return (
+                                <label
+                                  key={perm.key}
+                                  className={`p-2.5 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                                    isChecked
+                                      ? "bg-white border-blue-400 ring-1 ring-blue-500/20 shadow-2xs"
+                                      : "bg-white/60 border-slate-200/80 hover:bg-white text-slate-600 opacity-75"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setRolePermissionsInput(prev => [...prev, perm.key]);
+                                      } else {
+                                        setRolePermissionsInput(prev => prev.filter(k => k !== perm.key));
+                                      }
+                                    }}
+                                    className="mt-0.5 size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className={`text-xs font-bold block ${isChecked ? "text-slate-900" : "text-slate-700"}`}>
+                                      {perm.label}
+                                    </span>
+                                    <span className="text-[10.5px] text-slate-400 block leading-tight mt-0.5">
+                                      {perm.description}
+                                    </span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Live Badge Preview */}
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live Badge Preview:</span>
+                    <span className={`px-2.5 py-1 text-[10.5px] font-bold font-mono uppercase tracking-wider rounded-lg border flex items-center gap-1.5 ${
+                      ROLE_COLOR_MAP[roleColorInput]?.badge || ROLE_COLOR_MAP.blue.badge
+                    }`}>
+                      <span className={`size-1.5 rounded-full ${ROLE_COLOR_MAP[roleColorInput]?.dot || ROLE_COLOR_MAP.blue.dot}`} />
+                      {roleNameInput.trim() || "Role Title"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsRoleModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCustomRole}
+                    disabled={loading}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    {loading ? "Saving..." : "Save Role & Permissions"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* ONBOARD NEW MEMBER SUBTAB */}
       {activeSubTab === "onboard" && (
         <div className="animate-in fade-in zoom-in-95 duration-200 bg-white border border-slate-200/60 rounded-2xl p-2 sm:p-4 shadow-2xs">
           <AddMember currentUser={currentUser} />
@@ -1905,7 +3125,7 @@ export default function AdminSettings({
                 <Banknote className="size-5 text-emerald-600 dark:text-emerald-500" /> General Fund & Treasury
               </h3>
               <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-1">
-                Manage global team treasury funds, direct deposits, grants, and withdrawals independent of specific projects.
+                Manage global team treasury funds (sponsorships, prize money, grants, and donations). Money in the General Fund belongs to the team and is never divided among members.
               </p>
             </div>
           </div>
@@ -1938,13 +3158,27 @@ export default function AdminSettings({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono mb-1.5">Description</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[10px] font-bold text-slate-550 dark:text-slate-400 uppercase tracking-wider font-mono">Description</label>
+                  <div className="flex items-center gap-1">
+                    {["Prize Money", "Sponsorship", "University Grant", "Donation"].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setNewFundNotes(tag)}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 dark:text-slate-300 font-mono transition-colors cursor-pointer"
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={newFundNotes}
                     onChange={(e) => setNewFundNotes(e.target.value)}
-                    placeholder="e.g. University Grant, Alumni Donation..."
+                    placeholder="e.g. Competition Prize Money, Corporate Sponsorship..."
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs font-mono outline-hidden dark:text-white"
                   />
                   <button
@@ -2350,19 +3584,335 @@ export default function AdminSettings({
                           </div>
                           
                           
-                          <div className="mt-3">
-                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Background Image URLs (Comma separated)</label>
-                            <input
-                              type="text"
-                              value={build.imageUrl || ""}
-                              placeholder="https://images.unsplash.com/photo-..."
+                          {/* Multi-Image Manager per Build */}
+                          <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                            {(() => {
+                              const buildImages = build.imageUrl ? build.imageUrl.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[8px] font-bold text-slate-400 uppercase font-mono flex items-center gap-1.5">
+                                      <span>Build Hardware & CAD Photos ({buildImages.length})</span>
+                                      <span className="text-[7.5px] text-slate-400 font-normal">Add multiple photos for visitor swiping</span>
+                                    </label>
+                                    
+                                    <label className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[8.5px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700 shadow-2xs">
+                                      <Upload className="size-3 text-blue-500" /> Upload Image
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="sr-only"
+                                        onChange={(e) => handleUploadBuildPhoto(idx, e)}
+                                      />
+                                    </label>
+                                  </div>
+
+                                  {/* Direct Image URL Input with Add Button */}
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      id={`new-build-url-${idx}`}
+                                      placeholder="https://images.unsplash.com/... or paste image URL"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const input = e.currentTarget;
+                                          const val = input.value.trim();
+                                          if (val) {
+                                            const updated = [...publicPageData.buildSpecs];
+                                            const current = updated[idx].imageUrl ? updated[idx].imageUrl!.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                            current.push(val);
+                                            updated[idx] = { ...updated[idx], imageUrl: current.join(', ') };
+                                            setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                            input.value = "";
+                                          }
+                                        }
+                                      }}
+                                      className="flex-1 text-[10px] font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const input = document.getElementById(`new-build-url-${idx}`) as HTMLInputElement;
+                                        if (input && input.value.trim()) {
+                                          const val = input.value.trim();
+                                          const updated = [...publicPageData.buildSpecs];
+                                          const current = updated[idx].imageUrl ? updated[idx].imageUrl!.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                          current.push(val);
+                                          updated[idx] = { ...updated[idx], imageUrl: current.join(', ') };
+                                          setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                          input.value = "";
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[9px] font-bold font-mono uppercase tracking-wider transition-colors cursor-pointer shrink-0"
+                                    >
+                                      + Add URL
+                                    </button>
+                                  </div>
+
+                                  {/* Image Thumbnails Strip */}
+                                  {buildImages.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                      {buildImages.map((imgUrl, imgIdx) => (
+                                        <div key={imgIdx} className="relative group/bimg w-20 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 shrink-0">
+                                          <img 
+                                            src={imgUrl} 
+                                            alt={`Build ${imgIdx + 1}`} 
+                                            className="w-full h-full object-cover" 
+                                            referrerPolicy="no-referrer"
+                                          />
+                                          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover/bimg:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const updated = [...publicPageData.buildSpecs];
+                                                const current = updated[idx].imageUrl ? updated[idx].imageUrl!.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                                const filtered = current.filter((_, i) => i !== imgIdx);
+                                                updated[idx] = { ...updated[idx], imageUrl: filtered.join(', ') };
+                                                setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                              }}
+                                              className="p-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                              title="Delete Photo"
+                                            >
+                                              <Trash2 className="size-3" />
+                                            </button>
+                                          </div>
+                                          <span className="absolute bottom-1 right-1 text-[7.5px] font-mono font-bold bg-black/70 text-white px-1 rounded">
+                                            #{imgIdx + 1}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[9.5px] text-slate-400 italic">No custom images uploaded yet. (Showing default unsplash placeholder)</p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION: ACHIEVEMENTS & AWARDS */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="size-4 text-amber-400" />
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">D. Team Achievements & Awards</h3>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-[10px] font-bold text-slate-300 font-mono tracking-wide uppercase">Show</span>
+                      <input 
+                        type="checkbox" 
+                        checked={publicPageData.showAchievements !== false}
+                        onChange={(e) => setPublicPageData({ ...publicPageData, showAchievements: e.target.checked })}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-7 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-[12px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500 relative"></div>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newId = `ach-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                        const list = publicPageData.achievements || [];
+                        const updated = [...list, {
+                          id: newId,
+                          title: "Robotics Competition Championship",
+                          eventOrCompetition: "National Robotics Challenge",
+                          yearOrDate: new Date().getFullYear().toString(),
+                          award: "1st Place Champions (Gold)",
+                          description: "Secured first place victory in the national autonomous tournament category.",
+                          badgeType: "gold" as const
+                        }];
+                        setPublicPageData({ ...publicPageData, achievements: updated });
+                      }}
+                      className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-mono text-[9px] font-extrabold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1 cursor-pointer font-sans shadow-xs"
+                    >
+                      <Plus className="size-3" /> Add Achievement
+                    </button>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {(!publicPageData.achievements || publicPageData.achievements.length === 0) ? (
+                    <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-950/25 border border-dashed rounded-xl border-slate-300">
+                      No achievements registered yet. Click "Add Achievement" to showcase your team's victories and awards!
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {publicPageData.achievements.map((ach, idx) => (
+                        <div key={`${ach.id}-${idx}`} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl relative space-y-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const list = publicPageData.achievements || [];
+                              const filtered = list.filter(a => a.id !== ach.id);
+                              setPublicPageData({ ...publicPageData, achievements: filtered });
+                            }}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                            title="Delete Achievement"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pr-8">
+                            <div className="md:col-span-2">
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Achievement / Award Title</label>
+                              <input
+                                type="text"
+                                value={ach.title}
+                                placeholder="e.g. National Robotics Championship"
+                                onChange={(e) => {
+                                  const list = [...(publicPageData.achievements || [])];
+                                  list[idx] = { ...list[idx], title: e.target.value };
+                                  setPublicPageData({ ...publicPageData, achievements: list });
+                                }}
+                                className="w-full text-xs font-bold px-2.5 py-1.8 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Event / Competition</label>
+                              <input
+                                type="text"
+                                value={ach.eventOrCompetition}
+                                placeholder="e.g. SLIIT ROBOFEST"
+                                onChange={(e) => {
+                                  const list = [...(publicPageData.achievements || [])];
+                                  list[idx] = { ...list[idx], eventOrCompetition: e.target.value };
+                                  setPublicPageData({ ...publicPageData, achievements: list });
+                                }}
+                                className="w-full text-xs font-semibold px-2.5 py-1.8 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Year / Date</label>
+                              <input
+                                type="text"
+                                value={ach.yearOrDate || ""}
+                                placeholder="e.g. 2025"
+                                onChange={(e) => {
+                                  const list = [...(publicPageData.achievements || [])];
+                                  list[idx] = { ...list[idx], yearOrDate: e.target.value };
+                                  setPublicPageData({ ...publicPageData, achievements: list });
+                                }}
+                                className="w-full text-xs font-mono px-2.5 py-1.8 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="md:col-span-2">
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Award Rank / Placement Tag</label>
+                              <input
+                                type="text"
+                                value={ach.award}
+                                placeholder="e.g. 1st Place Champions (Gold Medal)"
+                                onChange={(e) => {
+                                  const list = [...(publicPageData.achievements || [])];
+                                  list[idx] = { ...list[idx], award: e.target.value };
+                                  setPublicPageData({ ...publicPageData, achievements: list });
+                                }}
+                                className="w-full text-xs font-semibold text-amber-700 dark:text-amber-400 px-2.5 py-1.8 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Badge Styling</label>
+                              <select
+                                value={ach.badgeType || "gold"}
+                                onChange={(e) => {
+                                  const list = [...(publicPageData.achievements || [])];
+                                  list[idx] = { ...list[idx], badgeType: e.target.value as any };
+                                  setPublicPageData({ ...publicPageData, achievements: list });
+                                }}
+                                className="w-full text-xs font-medium px-2.5 py-1.8 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200"
+                              >
+                                <option value="gold">🥇 Gold Trophy / Medal</option>
+                                <option value="silver">🥈 Silver Medal</option>
+                                <option value="bronze">🥉 Bronze Medal</option>
+                                <option value="award">⭐ Award / Innovation</option>
+                                <option value="trophy">🏆 General Trophy</option>
+                              </select>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1">Achievement Description & Engineering Highlights</label>
+                            <textarea
+                              rows={2}
+                              value={ach.description}
+                              placeholder="Describe the category victory, bot performance, or engineering milestone..."
                               onChange={(e) => {
-                                  const updated = [...publicPageData.buildSpecs];
-                                  updated[idx] = { ...updated[idx], imageUrl: e.target.value };
-                                  setPublicPageData({ ...publicPageData, buildSpecs: updated });
+                                const list = [...(publicPageData.achievements || [])];
+                                list[idx] = { ...list[idx], description: e.target.value };
+                                setPublicPageData({ ...publicPageData, achievements: list });
                               }}
-                              className="w-full text-[11px] font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                              className="w-full text-[11px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100 leading-normal"
                             />
+                          </div>
+
+                          <div className="pt-1">
+                            <label className="block text-[8px] font-bold text-slate-400 uppercase font-mono mb-1.5 flex items-center justify-between">
+                              <span>Achievement Trophy / Podium / Certificate Photo</span>
+                              <span className="text-[7.5px] text-slate-400 font-normal">Direct URL or Upload</span>
+                            </label>
+                            
+                            <div className="flex flex-col sm:flex-row gap-2.5 items-start">
+                              <div className="flex-1 w-full space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={ach.imageUrl || ""}
+                                    placeholder="https://... or click upload"
+                                    onChange={(e) => {
+                                      const list = [...(publicPageData.achievements || [])];
+                                      list[idx] = { ...list[idx], imageUrl: e.target.value };
+                                      setPublicPageData({ ...publicPageData, achievements: list });
+                                    }}
+                                    className="flex-1 text-[10px] font-mono px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-800 dark:text-slate-100"
+                                  />
+                                  
+                                  <label className="shrink-0 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[9px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700 shadow-2xs">
+                                    <Upload className="size-3 text-blue-500" /> Upload Photo
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="sr-only"
+                                      onChange={(e) => handleUploadAchievementPhoto(idx, e)}
+                                    />
+                                  </label>
+
+                                  {ach.imageUrl && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const list = [...(publicPageData.achievements || [])];
+                                        list[idx] = { ...list[idx], imageUrl: "" };
+                                        setPublicPageData({ ...publicPageData, achievements: list });
+                                      }}
+                                      className="px-2 py-1.5 text-slate-400 hover:text-red-500 rounded-lg text-[9px] font-bold font-mono transition-colors cursor-pointer border border-transparent hover:border-red-200 dark:hover:border-red-900/40"
+                                      title="Remove photo"
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {ach.imageUrl && (
+                                <div className="relative shrink-0 w-20 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 group/thumb">
+                                  <img 
+                                    src={ach.imageUrl} 
+                                    alt="Achievement preview" 
+                                    className="w-full h-full object-cover" 
+                                    referrerPolicy="no-referrer"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2376,7 +3926,7 @@ export default function AdminSettings({
                 <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-100 dark:border-slate-805">
                   <div className="flex items-center gap-2">
                     <Target className="size-4 text-purple-400" />
-                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">D. Team Performance Trajectory & Records</h3>
+                    <h3 className="font-display text-xs font-bold uppercase tracking-wider">E. Team Performance Trajectory & Records</h3>
                   </div>
                   <button
                     type="button"
