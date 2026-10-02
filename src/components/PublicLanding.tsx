@@ -717,12 +717,31 @@ export default function PublicLanding({ onOpenLogin }: PublicLandingProps) {
             variants={slowFadeIn}
             className="flex flex-col items-center text-center justify-center py-8 px-4 scroll-mt-32"
           >
-            <div className="inline-flex items-center gap-2 px-3 tracking-[0.2em] py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full font-mono text-[10px] font-bold uppercase mb-6 border border-blue-100/50">
-              <Sparkles className="size-3 animate-pulse" /> Welcome to Team AXOTIC
+            <div className="inline-flex items-center gap-2 px-3.5 tracking-[0.2em] py-1.5 bg-blue-50/90 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-full font-mono text-[10px] font-bold uppercase mb-8 border border-blue-200/60 dark:border-blue-700/50 shadow-2xs">
+              <Sparkles className="size-3.5 text-blue-500 animate-pulse" /> Welcome to Team AXOTIC
             </div>
+
+            {/* Official AXOTIC Title Logo Emblem */}
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="relative mb-6 group flex items-center justify-center"
+            >
+              <div className="absolute -inset-6 bg-gradient-to-r from-blue-600/25 via-cyan-500/20 to-indigo-600/25 rounded-3xl blur-2xl opacity-75 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <img 
+                src={activeLogoUrl || undefined} 
+                alt="AXOTIC Title Logo" 
+                className="relative h-24 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </motion.div>
             
             <h1 
-              className="text-4xl sm:text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#0f2e46] to-slate-500 dark:from-white dark:to-slate-400 tracking-tighter leading-[1.1] max-w-4xl mb-8 drop-shadow-sm"
+              className="text-3xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#0f2e46] to-slate-600 dark:from-white dark:to-slate-300 tracking-tighter leading-[1.1] max-w-4xl mb-6 drop-shadow-xs"
               dangerouslySetInnerHTML={{ __html: (landingData.heroTitle || "").replace("AXOTIC", `<span class="text-blue-600 dark:text-blue-500">AXOTIC</span>`) }}
             />
             <p className="text-base sm:text-lg text-slate-500 dark:text-slate-400 font-light max-w-2xl leading-relaxed mb-8">
