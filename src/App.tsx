@@ -70,6 +70,7 @@ export default function App() {
   const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
+  const [isProjectsLoading, setIsProjectsLoading] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [showUserPopover, setShowUserPopover] = useState(false);
@@ -386,8 +387,10 @@ export default function App() {
 
   // 3. Stream Team Roster list real-time (Only when logged in)
   useEffect(() => {
+    // Explicitly initialize roster state as empty array before stream or mock data resolves
+    setRoster([]);
+
     if (!currentUser) {
-      setRoster([]);
       return;
     }
 
@@ -473,7 +476,7 @@ export default function App() {
     });
 
     return () => unsubRoster();
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, currentUser?.isOfflineMock]);
 
 
   // Stream Competitions Data for indicator
@@ -560,10 +563,15 @@ export default function App() {
 
   // 4. Stream Project lists globally to sync across screens (Only when logged in)
   useEffect(() => {
+    // Explicitly initialize projects list state as empty array before stream or mock data resolves
+    setProjectsList([]);
+
     if (!currentUser) {
-      setProjectsList([]);
+      setIsProjectsLoading(false);
       return;
     }
+
+    setIsProjectsLoading(true);
 
     if (currentUser.isOfflineMock) {
       const seedProjects = () => {
@@ -571,6 +579,7 @@ export default function App() {
         if (local) {
           try {
             setProjectsList(JSON.parse(local));
+            setIsProjectsLoading(false);
             return;
           } catch (_) {}
         }
@@ -627,6 +636,7 @@ export default function App() {
         ];
         localStorage.setItem("axotic_mock_projects", JSON.stringify(defaultProjects));
         setProjectsList(defaultProjects);
+        setIsProjectsLoading(false);
       };
 
       seedProjects();
@@ -638,6 +648,7 @@ export default function App() {
             setProjectsList(JSON.parse(local));
           } catch (_) {}
         }
+        setIsProjectsLoading(false);
       };
       window.addEventListener("axotic_db_update", handleStorageChange);
       return () => window.removeEventListener("axotic_db_update", handleStorageChange);
@@ -650,13 +661,15 @@ export default function App() {
         items.push({ id: snapDoc.id, ...snapDoc.data() } as Project);
       });
       setProjectsList(items);
+      setIsProjectsLoading(false);
     }, (err) => {
       console.warn("Could not fetch global build listings real-time.", err instanceof Error ? err.message : String(err));
       handleFirestoreError(err, OperationType.GET, "projects");
+      setIsProjectsLoading(false);
     });
 
     return () => unsubProjects();
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, currentUser?.isOfflineMock]);
 
   // Stream notifications real-time
   useEffect(() => {
@@ -1511,6 +1524,7 @@ export default function App() {
                         currentUser={effectiveUser} 
                         roster={roster} 
                         projectsList={projectsList} 
+                        isProjectsLoading={isProjectsLoading}
                         onNavigate={(tab, projectId, subTab) => {
                           setActiveTab(tab);
                           if (projectId) {
@@ -1538,6 +1552,7 @@ export default function App() {
                         roster={roster} 
                         initialSelectedProjectId={selectedProjectId}
                         onClearInitialSelectedProjectId={() => setSelectedProjectId(null)}
+                        isProjectsLoading={isProjectsLoading}
                       />
                     </motion.div>
                   )}

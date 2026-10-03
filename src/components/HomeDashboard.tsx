@@ -32,11 +32,13 @@ import { UserProfile, Project, ProjectLog, InventoryItem, ProjectStatus, Allocat
 import TagInput from "./TagInput";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import { resolveMemberRole } from "../roleUtils";
+import { ProjectGridSkeleton, HomeAssociatedBuildSkeleton, ShimmerBlock } from "./DashboardSkeletons";
 
 interface HomeDashboardProps {
   currentUser: UserProfile;
   roster: UserProfile[];
   projectsList: Project[];
+  isProjectsLoading?: boolean;
   onNavigate: (tab: "projects" | "inventory" | "roster" | "settings" | "ideas" | "competitions", projectId?: string, subTab?: string) => void;
   onOpenEditProfile: () => void;
 }
@@ -87,8 +89,9 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
-export default function HomeDashboard({ currentUser, roster, projectsList, onNavigate, onOpenEditProfile }: HomeDashboardProps) {
+export default function HomeDashboard({ currentUser, roster, projectsList, isProjectsLoading, onNavigate, onOpenEditProfile }: HomeDashboardProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState(true);
   const [allLogs, setAllLogs] = useState<ProjectLog[]>([]);
   const [allAllocations, setAllAllocations] = useState<{ [projectId: string]: AllocatedHardware[] }>({});
   const [chartView, setChartView] = useState<"parts" | "categories">("parts");
@@ -183,6 +186,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
             setInventory(JSON.parse(localItems));
           } catch (_) {}
         }
+        setLoadingInventory(false);
       };
       // Initial seed query
       handleStorageUpdate();
@@ -196,8 +200,10 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           items.push({ id: snapDoc.id, ...snapDoc.data() } as InventoryItem);
         });
         setInventory(items);
+        setLoadingInventory(false);
       }, (err) => {
         console.warn("Could not query inventory real-time for home metrics.", err instanceof Error ? err.message : String(err));
+        setLoadingInventory(false);
       });
       return () => unsubscribe();
     }
@@ -701,14 +707,22 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
               className="flex -space-x-3 cursor-pointer group" 
               title="Active Specialists Directory"
             >
-              {roster.slice(0, 5).map(m => (
-                <img 
-                  key={m.uid}
-                  src={m.avatarUrl || undefined} 
-                  alt={m.displayName}
-                  className="size-10 rounded-full border-2 border-[#0f172a] object-cover bg-slate-800 transition-transform group-hover:-translate-y-1" 
-                />
-              ))}
+              {roster.length === 0 ? (
+                <div className="flex -space-x-2 animate-pulse">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="size-10 rounded-full border-2 border-[#0f172a] bg-slate-700/60" />
+                  ))}
+                </div>
+              ) : (
+                roster.slice(0, 5).map(m => (
+                  <img 
+                    key={m.uid}
+                    src={m.avatarUrl || undefined} 
+                    alt={m.displayName}
+                    className="size-10 rounded-full border-2 border-[#0f172a] object-cover bg-slate-800 transition-transform group-hover:-translate-y-1" 
+                  />
+                ))
+              )}
               {roster.length > 5 && (
                 <div className="size-10 rounded-full border-2 border-[#0f172a] bg-slate-800 flex items-center justify-center text-[11px] font-bold text-slate-300 relative z-10 transition-transform group-hover:-translate-y-1">
                   +{roster.length - 5}
@@ -869,13 +883,21 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           </div>
           <div>
             <span className="text-5xl font-black tracking-tighter text-blue-950 block mb-3 font-display">
-              {ongoingProjects.length}
+              {isProjectsLoading && projectsList.length === 0 ? (
+                <span className="inline-block h-12 w-20 bg-blue-200/70 animate-pulse rounded-xl" />
+              ) : (
+                ongoingProjects.length
+              )}
             </span>
             <span className="text-[13px] font-extrabold uppercase tracking-widest text-blue-700 block mb-1">
               Active Operations
             </span>
             <span className="text-xs font-semibold text-blue-600/70 flex items-center gap-1">
-              <CheckCircle2 className="size-3.5" /> {projectsList.filter(p => p.status === "Finished").length} logged as complete
+              {isProjectsLoading && projectsList.length === 0 ? (
+                <span className="inline-block h-3.5 w-32 bg-blue-200/60 animate-pulse rounded" />
+              ) : (
+                <><CheckCircle2 className="size-3.5" /> {projectsList.filter(p => p.status === "Finished").length} logged as complete</>
+              )}
             </span>
           </div>
         </motion.div>
@@ -890,13 +912,21 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           </div>
           <div>
             <span className="text-5xl font-black tracking-tighter text-rose-950 block mb-3 font-display">
-              {lowStockItems.length}
+              {loadingInventory && inventory.length === 0 ? (
+                <span className="inline-block h-12 w-20 bg-rose-200/70 animate-pulse rounded-xl" />
+              ) : (
+                lowStockItems.length
+              )}
             </span>
             <span className="text-[13px] font-extrabold uppercase tracking-widest text-rose-700 block mb-1">
               Low Stock Alerts
             </span>
             <span className="text-xs font-semibold text-rose-600/70 flex items-center gap-1">
-              <Layers className="size-3.5" /> {inventory.length} total active parts
+              {loadingInventory && inventory.length === 0 ? (
+                <span className="inline-block h-3.5 w-28 bg-rose-200/60 animate-pulse rounded" />
+              ) : (
+                <><Layers className="size-3.5" /> {inventory.length} total active parts</>
+              )}
             </span>
           </div>
         </motion.div>
@@ -911,13 +941,21 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
           </div>
           <div>
             <span className="text-5xl font-black tracking-tighter text-slate-900 block mb-3 font-display">
-              {roster.length}
+              {roster.length === 0 ? (
+                <span className="inline-block h-12 w-20 bg-slate-200/70 animate-pulse rounded-xl" />
+              ) : (
+                roster.length
+              )}
             </span>
             <span className="text-[13px] font-extrabold uppercase tracking-widest text-slate-700 block mb-1">
               Roster Specialists
             </span>
             <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-              <ShieldCheck className="size-3.5 text-emerald-500" /> Fully cleared personnel
+              {roster.length === 0 ? (
+                <span className="inline-block h-3.5 w-28 bg-slate-200/60 animate-pulse rounded" />
+              ) : (
+                <><ShieldCheck className="size-3.5 text-emerald-500" /> Fully cleared personnel</>
+              )}
             </span>
           </div>
         </motion.div>
@@ -942,7 +980,11 @@ export default function HomeDashboard({ currentUser, roster, projectsList, onNav
             </button>
           </div>
           
-          {myProjects.length === 0 ? (
+          {isProjectsLoading && projectsList.length === 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <HomeAssociatedBuildSkeleton count={3} />
+            </div>
+          ) : myProjects.length === 0 ? (
             <div className="text-center py-12 px-6 bg-slate-50 border border-slate-200/60 rounded-2xl border-dashed">
               <Compass className="size-10 text-slate-300 mx-auto mb-3" />
               <h4 className="text-sm font-bold text-slate-700">No active assignments</h4>

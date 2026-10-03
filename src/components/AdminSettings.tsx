@@ -619,14 +619,19 @@ export default function AdminSettings({
       const unsub = onSnapshot(doc(db, "landing", "public"), (snap) => {
         if (snap.exists()) {
           const d = snap.data() as Partial<PublicLandingData>;
+          const rawBuildSpecs = Array.isArray(d.buildSpecs) ? d.buildSpecs : [];
+          const rawAchievements = Array.isArray(d.achievements) ? d.achievements : [];
+          const buildSpecs = rawBuildSpecs.filter((b: BuildSpec) => b.id !== "build-auto" && b.id !== "build-combat");
+          const achievements = rawAchievements.filter((a: Achievement) => a.id !== "ach-1" && a.id !== "ach-2" && a.id !== "ach-3");
+
           setPublicPageData({
             ...defaultPublicLandingData,
             ...d,
-            subTeams: d.subTeams || defaultPublicLandingData.subTeams,
-            buildSpecs: d.buildSpecs || defaultPublicLandingData.buildSpecs,
-            trackRecords: d.trackRecords || defaultPublicLandingData.trackRecords,
-            achievements: d.achievements || defaultPublicLandingData.achievements,
-            galleryPhotos: d.galleryPhotos || defaultPublicLandingData.galleryPhotos,
+            subTeams: d.subTeams !== undefined ? d.subTeams : [],
+            buildSpecs,
+            trackRecords: d.trackRecords !== undefined ? d.trackRecords : [],
+            achievements,
+            galleryPhotos: d.galleryPhotos !== undefined ? d.galleryPhotos : [],
             showAchievements: d.showAchievements !== undefined ? d.showAchievements : true,
           } as PublicLandingData);
         } else {

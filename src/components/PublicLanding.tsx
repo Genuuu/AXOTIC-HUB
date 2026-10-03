@@ -31,7 +31,7 @@ const defaultLogoUrl = "/logo.png";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
-import { defaultPublicLandingData, PublicLandingData, Achievement } from "./defaultPublicLandingData";
+import { defaultPublicLandingData, PublicLandingData, Achievement, BuildSpec } from "./defaultPublicLandingData";
 import { UserProfile } from "../types";
 
 interface PublicLandingProps {
@@ -440,9 +440,17 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
       if (local) {
         const parsed = JSON.parse(local);
         if (parsed && typeof parsed === "object") {
+          const buildSpecs = Array.isArray(parsed.buildSpecs)
+            ? parsed.buildSpecs.filter((b: BuildSpec) => b.id !== "build-auto" && b.id !== "build-combat")
+            : [];
+          const achievements = Array.isArray(parsed.achievements)
+            ? parsed.achievements.filter((a: Achievement) => a.id !== "ach-1" && a.id !== "ach-2" && a.id !== "ach-3")
+            : [];
           return {
             ...defaultPublicLandingData,
-            ...parsed
+            ...parsed,
+            buildSpecs,
+            achievements
           };
         }
       }
@@ -470,9 +478,18 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     const local = localStorage.getItem("axotic_public_landing_config");
     if (local) {
       try {
+        const parsed = JSON.parse(local);
+        const buildSpecs = Array.isArray(parsed.buildSpecs)
+          ? parsed.buildSpecs.filter((b: BuildSpec) => b.id !== "build-auto" && b.id !== "build-combat")
+          : [];
+        const achievements = Array.isArray(parsed.achievements)
+          ? parsed.achievements.filter((a: Achievement) => a.id !== "ach-1" && a.id !== "ach-2" && a.id !== "ach-3")
+          : [];
         setLandingData({
           ...defaultPublicLandingData,
-          ...JSON.parse(local)
+          ...parsed,
+          buildSpecs,
+          achievements
         });
       } catch (_) {}
     }
@@ -482,9 +499,18 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
       const updated = localStorage.getItem("axotic_public_landing_config");
       if (updated) {
         try {
+          const parsed = JSON.parse(updated);
+          const buildSpecs = Array.isArray(parsed.buildSpecs)
+            ? parsed.buildSpecs.filter((b: BuildSpec) => b.id !== "build-auto" && b.id !== "build-combat")
+            : [];
+          const achievements = Array.isArray(parsed.achievements)
+            ? parsed.achievements.filter((a: Achievement) => a.id !== "ach-1" && a.id !== "ach-2" && a.id !== "ach-3")
+            : [];
           setLandingData({
             ...defaultPublicLandingData,
-            ...JSON.parse(updated)
+            ...parsed,
+            buildSpecs,
+            achievements
           });
         } catch (_) {}
       }
@@ -496,16 +522,26 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     const unsub = onSnapshot(doc(db, "landing", "public"), (snap) => {
       if (snap.exists()) {
         const d = snap.data() as Partial<PublicLandingData>;
-        setLandingData({
+        const rawBuildSpecs = Array.isArray(d.buildSpecs) ? d.buildSpecs : [];
+        const rawAchievements = Array.isArray(d.achievements) ? d.achievements : [];
+        
+        const buildSpecs = rawBuildSpecs.filter((b: BuildSpec) => b.id !== "build-auto" && b.id !== "build-combat");
+        const achievements = rawAchievements.filter((a: Achievement) => a.id !== "ach-1" && a.id !== "ach-2" && a.id !== "ach-3");
+
+        const updatedData: PublicLandingData = {
           ...defaultPublicLandingData,
           ...d,
-          subTeams: d.subTeams || defaultPublicLandingData.subTeams,
-          buildSpecs: d.buildSpecs || defaultPublicLandingData.buildSpecs,
-          trackRecords: d.trackRecords || defaultPublicLandingData.trackRecords,
-          achievements: d.achievements || defaultPublicLandingData.achievements,
-          galleryPhotos: d.galleryPhotos || defaultPublicLandingData.galleryPhotos,
+          subTeams: d.subTeams !== undefined ? d.subTeams : [],
+          buildSpecs,
+          trackRecords: d.trackRecords !== undefined ? d.trackRecords : [],
+          achievements,
+          galleryPhotos: d.galleryPhotos !== undefined ? d.galleryPhotos : [],
           showAchievements: d.showAchievements !== undefined ? d.showAchievements : true,
-        } as PublicLandingData);
+        };
+        setLandingData(updatedData);
+        try {
+          localStorage.setItem("axotic_public_landing_config", JSON.stringify(updatedData));
+        } catch (_) {}
       }
       setIsSyncingData(false);
     }, (err) => {
@@ -959,26 +995,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
 
           {/* Grid of Images / Interactive Build Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {isSyncingData ? (
-              [1, 2].map(i => (
-                <div key={`build-skel-${i}`} className="bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-5 space-y-4 animate-pulse shadow-xs">
-                  <div className="aspect-[16/10] bg-slate-200 dark:bg-slate-800 rounded-2xl w-full" />
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-1/2" />
-                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-full w-16" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-full" />
-                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-3/4" />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-20" />
-                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-20" />
-                  </div>
-                </div>
-              ))
-            ) : landingData.buildSpecs && landingData.buildSpecs.length > 0 ? (
+            {landingData.buildSpecs && landingData.buildSpecs.length > 0 ? (
               landingData.buildSpecs.map((spec, idx) => (
                 <BuildCard 
                   key={`${spec.id || 'build'}-${idx}`} 
@@ -993,7 +1010,6 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
                  No active build profiles synchronized.
                </div>
             )}
-
           </div>
         </motion.section>
         )}
@@ -1138,20 +1154,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {isSyncingData ? (
-                [1, 2, 3].map(i => (
-                  <div key={`ach-skel-${i}`} className="bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-6 space-y-4 animate-pulse shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="size-11 bg-slate-200 dark:bg-slate-800 rounded-2xl" />
-                      <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-16" />
-                    </div>
-                    <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
-                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-full" />
-                    <div className="h-3.5 bg-slate-200/80 dark:bg-slate-800/80 rounded-md w-2/3" />
-                  </div>
-                ))
-              ) : (
-                landingData.achievements.map((ach, idx) => {
+              {landingData.achievements.map((ach, idx) => {
                 const awardLower = (ach.award || "").toLowerCase();
                 const isGold = ach.badgeType === "gold" || awardLower.includes("1st") || awardLower.includes("gold") || awardLower.includes("champion");
                 const isSilver = ach.badgeType === "silver" || awardLower.includes("2nd") || awardLower.includes("silver") || awardLower.includes("runner");
@@ -1262,8 +1265,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
                     </div>
                   </motion.div>
                 );
-              })
-              )}
+              })}
             </div>
           </motion.section>
         )}

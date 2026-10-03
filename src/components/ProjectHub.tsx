@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, GeneralFundAllocation, MemberContribution, PeerTransfer, GeneralFundTransaction } from "../types";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
+import { ProjectGridSkeleton, ProjectDetailSkeleton, ShimmerBlock } from "./DashboardSkeletons";
 
 // Dynamic input preview formatter for high craftsmanship human error checks
 const formatInputPreview = (value: number): string => {
@@ -74,10 +75,19 @@ interface ProjectHubProps {
   roster: UserProfile[];
   initialSelectedProjectId?: string | null;
   onClearInitialSelectedProjectId?: () => void;
+  isProjectsLoading?: boolean;
 }
 
-export default function ProjectHub({ currentUser, roster, initialSelectedProjectId, onClearInitialSelectedProjectId }: ProjectHubProps) {
+export default function ProjectHub({ 
+  currentUser, 
+  roster, 
+  initialSelectedProjectId, 
+  onClearInitialSelectedProjectId,
+  isProjectsLoading 
+}: ProjectHubProps) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [internalLoading, setInternalLoading] = useState(true);
+  const isLoading = isProjectsLoading !== undefined ? isProjectsLoading : internalLoading;
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectTab, setProjectTab] = useState<"ongoing" | "finished">("ongoing");
   const [searchQuery, setSearchQuery] = useState("");
@@ -390,6 +400,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
             }
           } catch (_) {}
         }
+        setInternalLoading(false);
       };
       loadLocalProjects();
       window.addEventListener("axotic_db_update", loadLocalProjects);
@@ -403,6 +414,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
         items.push({ id: docSnap.id, ...docSnap.data() } as Project);
       });
       setProjects(items);
+      setInternalLoading(false);
       
       // Keep selected project details synchronized
       if (selectedProject) {
@@ -411,6 +423,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
       }
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, "projects");
+      setInternalLoading(false);
     });
     return () => unsubscribe();
   }, [selectedProject?.id, currentUser?.isOfflineMock]);
@@ -1352,7 +1365,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              Ongoing ({ongoingProjects.length})
+              Ongoing {isLoading && projects.length === 0 ? "" : `(${ongoingProjects.length})`}
             </button>
             <button
               type="button"
@@ -1367,7 +1380,7 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              Finished Archive ({finishedProjects.length})
+              Finished Archive {isLoading && projects.length === 0 ? "" : `(${finishedProjects.length})`}
             </button>
           </div>
 
@@ -1440,7 +1453,9 @@ export default function ProjectHub({ currentUser, roster, initialSelectedProject
 
         {/* Bento grid layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.length === 0 ? (
+          {isLoading && projects.length === 0 ? (
+            <ProjectGridSkeleton count={6} />
+          ) : filteredProjects.length === 0 ? (
             <div id="no-projects-fallback" className="col-span-full bg-white rounded-xl border border-dashed border-slate-200/85 p-12 text-center shadow-2xs">
               {searchQuery ? (
                 <>
