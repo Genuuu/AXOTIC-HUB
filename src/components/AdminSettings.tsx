@@ -66,6 +66,7 @@ import AddMember from "./AddMember";
 import TagInput from "./TagInput";
 import { defaultPublicLandingData, PublicLandingData, SubTeam, BuildSpec, TrackRecord, Achievement } from "./defaultPublicLandingData";
 import { TreasuryHub } from "./TreasuryHub";
+import { optimizeImage } from "../utils/imageOptimizer";
 
 export function parseBuildImages(rawUrl: string | undefined): string[] {
   if (!rawUrl) return [];
@@ -666,7 +667,7 @@ export default function AdminSettings({
     }
   };
 
-  const handleUploadAchievementPhoto = (achIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadAchievementPhoto = async (achIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -675,49 +676,20 @@ export default function AdminSettings({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (readerEvent) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_SIZE = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height = Math.round((height * MAX_SIZE) / width);
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width = Math.round((width * MAX_SIZE) / height);
-            height = MAX_SIZE;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-          
-          if (publicPageData) {
-            const list = [...(publicPageData.achievements || [])];
-            list[achIndex] = { ...list[achIndex], imageUrl: dataUrl };
-            setPublicPageData({ ...publicPageData, achievements: list });
-          }
-        }
-      };
-      img.src = readerEvent.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await optimizeImage(file, { maxBounds: 640, quality: 0.65, format: 'image/webp' });
+      if (publicPageData) {
+        const list = [...(publicPageData.achievements || [])];
+        list[achIndex] = { ...list[achIndex], imageUrl: dataUrl };
+        setPublicPageData({ ...publicPageData, achievements: list });
+      }
+    } catch (err) {
+      console.warn("Failed to optimize uploaded achievement photo.", err);
+    }
     e.target.value = "";
   };
 
-  const handleUploadBuildPhoto = (buildIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadBuildPhoto = async (buildIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -726,47 +698,18 @@ export default function AdminSettings({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (readerEvent) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX_SIZE = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height = Math.round((height * MAX_SIZE) / width);
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width = Math.round((width * MAX_SIZE) / height);
-            height = MAX_SIZE;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-          
-          if (publicPageData) {
-            const list = [...publicPageData.buildSpecs];
-            const currentUrls = parseBuildImages(list[buildIndex].imageUrl);
-            currentUrls.push(dataUrl);
-            list[buildIndex] = { ...list[buildIndex], imageUrl: joinBuildImages(currentUrls) };
-            setPublicPageData({ ...publicPageData, buildSpecs: list });
-          }
-        }
-      };
-      img.src = readerEvent.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await optimizeImage(file, { maxBounds: 640, quality: 0.65, format: 'image/webp' });
+      if (publicPageData) {
+        const list = [...publicPageData.buildSpecs];
+        const currentUrls = parseBuildImages(list[buildIndex].imageUrl);
+        currentUrls.push(dataUrl);
+        list[buildIndex] = { ...list[buildIndex], imageUrl: joinBuildImages(currentUrls) };
+        setPublicPageData({ ...publicPageData, buildSpecs: list });
+      }
+    } catch (err) {
+      console.warn("Failed to optimize uploaded build photo.", err);
+    }
     e.target.value = "";
   };
 

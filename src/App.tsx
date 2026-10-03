@@ -1199,7 +1199,7 @@ export default function App() {
                     title="Switch to Public Homepage Preview"
                   >
                     <Globe className="size-3.5" />
-                    <span>Public Homepage</span>
+                    <span className="hidden sm:inline">Public Homepage</span>
                   </button>
 
                   {/* Notifications Dropdown */}

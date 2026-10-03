@@ -26,7 +26,7 @@ import {
   ZoomIn,
   Database
 } from "lucide-react";
-import { motion, AnimatePresence, useScroll, useTransform } from "motion/react";
+import { motion, AnimatePresence, LayoutGroup, useScroll, useTransform } from "motion/react";
 const defaultLogoUrl = "/logo.png";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import { db, handleFirestoreError, OperationType } from "../firebase";
@@ -455,7 +455,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     }
   }, [landingData.galleryPhotos]);
 
-  const [isSyncingData, setIsSyncingData] = useState(true);
+  const [isSyncingData, setIsSyncingData] = useState(false);
 
   useEffect(() => {
     // 1. Try to fetch custom settings from localStorage if cached in sandbox mode
@@ -468,10 +468,6 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
         });
       } catch (_) {}
     }
-
-    const timer = setTimeout(() => {
-      setIsSyncingData(false);
-    }, 450);
 
     // Tab-level communication for instant preview update
     const handleStorageChange = () => {
@@ -510,7 +506,6 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     });
 
     return () => {
-      clearTimeout(timer);
       window.removeEventListener("axotic_db_update", handleStorageChange);
       unsub();
     };
@@ -697,82 +692,74 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
         className="fixed top-0 left-0 right-0 w-full z-50 py-2.5 sm:py-3.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-900 dark:text-white border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs flex justify-center items-center"
       >
         <div className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
-          <div className="w-full sm:w-auto flex items-center justify-between">
-            <div className="flex items-center space-x-3.5">
+          <div className="w-full sm:w-auto flex items-center justify-center sm:justify-start">
+            <div className="flex items-center justify-center space-x-3.5">
               <img 
                 src={activeLogoUrl || undefined} 
                 alt="AXOTIC Logo" 
-                className="h-9 sm:h-11 md:h-13 w-auto max-w-[45vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all" 
+                className="h-9 sm:h-11 md:h-13 w-auto max-w-[65vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all mx-auto sm:mx-0" 
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
               />
             </div>
-
-            {/* Mobile Member Login Button */}
-            <div className="sm:hidden">
-              <button
-                onClick={currentUser && onSwitchToDatabase ? onSwitchToDatabase : onOpenLogin}
-                className="px-3 py-1.5 bg-blue-600 dark:bg-blue-500 text-white rounded-lg text-[10px] font-bold font-mono tracking-wider flex items-center gap-1.5 shadow-xs uppercase cursor-pointer"
-              >
-                <Lock className="size-3" /> LOGIN
-              </button>
-            </div>
           </div>
 
           {/* Dynamic Animated Tab Navigation - Highlights as you scroll */}
-          <nav className="flex items-center gap-1 sm:gap-2 lg:gap-3 overflow-x-auto max-w-full py-1 px-1 scrollbar-none">
-            {['Intro', 'About Us', 'Our Builds', 'Achievements', 'Sponsors', 'Contact'].map((item) => {
-              const isVisible = 
-                (item === 'Intro' && landingData.showIntro !== false) ||
-                (item === 'About Us' && landingData.showAboutUs !== false) ||
-                (item === 'Our Builds' && landingData.showBuilds !== false) ||
-                (item === 'Achievements' && landingData.showAchievements !== false && landingData.achievements && landingData.achievements.length > 0) ||
-                (item === 'Sponsors' && landingData.showSponsors !== false) ||
-                (item === 'Contact' && landingData.showContactUs !== false);
-              
-              if (!isVisible) return null;
+          <LayoutGroup id="publicHeaderNavTabs">
+            <nav className="flex items-center gap-1 sm:gap-2 lg:gap-3 overflow-x-auto max-w-full py-1 px-1 scrollbar-none">
+              {['Intro', 'About Us', 'Our Builds', 'Achievements', 'Sponsors', 'Contact'].map((item) => {
+                const isVisible = 
+                  (item === 'Intro' && landingData.showIntro !== false) ||
+                  (item === 'About Us' && landingData.showAboutUs !== false) ||
+                  (item === 'Our Builds' && landingData.showBuilds !== false) ||
+                  (item === 'Achievements' && landingData.showAchievements !== false && landingData.achievements && landingData.achievements.length > 0) ||
+                  (item === 'Sponsors' && landingData.showSponsors !== false) ||
+                  (item === 'Contact' && landingData.showContactUs !== false);
+                
+                if (!isVisible) return null;
 
-              const id = 
-                item === 'Contact' ? 'contact-section' : 
-                item === 'Sponsors' ? 'sponsors-section' : 
-                item === 'Achievements' ? 'achievements-section' :
-                item === 'Our Builds' ? 'builds-section' : 
-                item === 'About Us' ? 'about-section' : 'intro-section';
+                const id = 
+                  item === 'Contact' ? 'contact-section' : 
+                  item === 'Sponsors' ? 'sponsors-section' : 
+                  item === 'Achievements' ? 'achievements-section' :
+                  item === 'Our Builds' ? 'builds-section' : 
+                  item === 'About Us' ? 'about-section' : 'intro-section';
 
-              const isActive = activeSection === id;
+                const isActive = activeSection === id;
 
-              return (
-                <button
-                  key={item}
-                  onClick={() => {
-                    const element = document.getElementById(id);
-                    if (element) {
-                      const yOffset = -90;
-                      const y = element.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0) + yOffset;
-                      window.scrollTo({ top: y, behavior: 'smooth' });
+                return (
+                  <button
+                    key={item}
+                    onClick={() => {
                       setActiveSection(id);
-                    }
-                  }}
-                  className={`relative shrink-0 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold tracking-wider uppercase font-mono rounded-xl transition-all cursor-pointer ${
-                    isActive 
-                      ? 'text-blue-500 dark:text-blue-400 bg-blue-500/10 dark:bg-blue-950/60 shadow-xs border border-blue-500/30' 
-                      : 'text-slate-600 dark:text-slate-300 hover:text-blue-500 dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeTabIndicator"
-                      className="absolute inset-0 bg-blue-500/15 dark:bg-blue-900/40 rounded-xl -z-10"
-                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                    />
-                  )}
-                  {item}
-                </button>
-              );
-            })}
-          </nav>
+                      const element = document.getElementById(id);
+                      if (element) {
+                        const yOffset = -90;
+                        const y = element.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0) + yOffset;
+                        window.scrollTo({ top: y, behavior: 'smooth' });
+                      }
+                    }}
+                    className={`relative shrink-0 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold tracking-wider uppercase font-mono rounded-xl transition-colors duration-200 cursor-pointer ${
+                      isActive 
+                        ? 'text-blue-600 dark:text-blue-400 font-extrabold' 
+                        : 'text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTabPill"
+                        className="absolute inset-0 bg-blue-500/15 dark:bg-blue-950/80 rounded-xl border border-blue-500/40 shadow-2xs -z-10"
+                        transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                      />
+                    )}
+                    <span className="relative z-10">{item}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </LayoutGroup>
 
           {/* Secure member login gateway button (Desktop) */}
           <motion.button
@@ -792,7 +779,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
       </motion.header>
 
       {/* Main Public Page Content Container */}
-      <main className="w-full max-w-4xl flex-1 z-10 flex flex-col items-stretch space-y-32 md:space-y-40 pt-10 pb-24">
+      <main className="w-full max-w-4xl flex-1 z-10 flex flex-col items-stretch space-y-16 sm:space-y-28 md:space-y-36 pt-4 sm:pt-10 pb-20">
         {/* SECTION 1: INTRO */}
         {landingData.showIntro !== false && (
           <motion.section 
@@ -800,10 +787,10 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
             initial="hidden"
             animate="visible"
             variants={slowFadeIn}
-            className="flex flex-col items-center text-center justify-center py-8 px-4 scroll-mt-32"
+            className="flex flex-col items-center text-center justify-center py-6 sm:py-8 px-2 sm:px-4 scroll-mt-28"
           >
-            <div className="inline-flex items-center gap-2 px-3.5 tracking-[0.2em] py-1.5 bg-blue-50/90 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-full font-mono text-[10px] font-bold uppercase mb-8 border border-blue-200/60 dark:border-blue-700/50 shadow-2xs">
-              <Sparkles className="size-3.5 text-blue-500 animate-pulse" /> Welcome to Team AXOTIC
+            <div className="inline-flex items-center gap-2 px-3 sm:px-3.5 tracking-[0.15em] sm:tracking-[0.2em] py-1.5 bg-blue-50/90 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-full font-mono text-[9px] sm:text-[10px] font-bold uppercase mb-6 sm:mb-8 border border-blue-200/60 dark:border-blue-700/50 shadow-2xs max-w-[92vw] truncate">
+              <Sparkles className="size-3.5 text-blue-500 animate-pulse shrink-0" /> Welcome to Team AXOTIC
             </div>
 
             {/* Official AXOTIC Title Logo Emblem */}
@@ -817,7 +804,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
               <img 
                 src={activeLogoUrl || undefined} 
                 alt="AXOTIC Title Logo" 
-                className="relative h-24 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none"
+                className="relative h-20 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -826,21 +813,21 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
             </motion.div>
             
             <h1 
-              className="text-3xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#0f2e46] to-slate-600 dark:from-white dark:to-slate-300 tracking-tighter leading-[1.1] max-w-4xl mb-6 drop-shadow-xs"
+              className="text-2xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#0f2e46] to-slate-600 dark:from-white dark:to-slate-300 tracking-tighter leading-[1.15] max-w-4xl mb-4 sm:mb-6 drop-shadow-xs px-1"
               dangerouslySetInnerHTML={{ __html: (landingData.heroTitle || "").replace("AXOTIC", `<span class="text-blue-600 dark:text-blue-500">AXOTIC</span>`) }}
             />
-            <p className="text-base sm:text-lg text-slate-500 dark:text-slate-400 font-light max-w-2xl leading-relaxed mb-8">
+            <p className="text-sm sm:text-lg text-slate-500 dark:text-slate-400 font-light max-w-2xl leading-relaxed mb-6 sm:mb-8 px-2">
               {landingData.heroSubtitle}
             </p>
 
             {landingData.showAboutUs !== false && (
-              <div className="flex gap-4 mt-4">
+              <div className="flex gap-4 mt-2 sm:mt-4 w-full sm:w-auto justify-center">
                 <a 
                   href="#about-section"
-                  className="group relative inline-flex items-center justify-center px-8 py-3 text-sm font-bold tracking-widest uppercase text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-full overflow-hidden shadow-lg transition-all hover:scale-105 hover:shadow-blue-500/30"
+                  className="group relative inline-flex items-center justify-center px-6 sm:px-8 py-3 text-xs sm:text-sm font-bold tracking-widest uppercase text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-full overflow-hidden shadow-lg transition-all hover:scale-105 hover:shadow-blue-500/30 w-full sm:w-auto"
                 >
                   <span className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black" />
-                  <span className="relative flex items-center gap-2">
+                  <span className="relative flex items-center justify-center gap-2">
                     Discover More <ArrowRight className="size-4 group-hover:translate-x-1 transition-transform" />
                   </span>
                 </a>
@@ -856,7 +843,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={slowFadeIn}
-            className="bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 rounded-[2.5rem] p-8 sm:p-14 shadow-lg relative overflow-hidden scroll-mt-32"
+            className="bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 rounded-3xl sm:rounded-[2.5rem] p-5 sm:p-10 md:p-14 shadow-lg relative overflow-hidden scroll-mt-28"
           >
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start relative z-10">
             <div className="md:col-span-4 space-y-3">
@@ -1283,7 +1270,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
           whileInView="visible"
           viewport={{ once: true, margin: "-50px" }}
           variants={slowFadeIn}
-          className="bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 rounded-[2.5rem] p-8 sm:p-14 shadow-lg relative overflow-hidden scroll-mt-32"
+          className="bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 rounded-3xl sm:rounded-[2.5rem] p-5 sm:p-10 md:p-14 shadow-lg relative overflow-hidden scroll-mt-28"
         >
           <div className="relative z-10">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-slate-800 rounded-full text-blue-600 dark:text-blue-400 font-mono text-[9px] font-bold tracking-widest uppercase mb-4 border border-blue-100 dark:border-slate-700">
@@ -1362,7 +1349,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
           whileInView="visible"
           viewport={{ once: true, margin: "-100px" }}
           variants={slowFadeIn}
-          className="bg-[#0f2e46] text-white rounded-[2.5rem] p-8 sm:p-14 shadow-2xl relative overflow-hidden scroll-mt-32"
+          className="bg-[#0f2e46] text-white rounded-3xl sm:rounded-[2.5rem] p-5 sm:p-10 md:p-14 shadow-2xl relative overflow-hidden scroll-mt-28"
         >
           {/* Subtle neon accents */}
           
