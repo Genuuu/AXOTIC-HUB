@@ -1715,11 +1715,32 @@ export default function AdminSettings({
                   <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">Hub Organization Logo URL</label>
                   <input
                     type="text"
-                    placeholder="https://example.com/logo.png"
+                    placeholder="Leave blank to use default dual-theme logo"
                     className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs outline-hidden font-medium dark:bg-slate-950 dark:border-slate-800"
                     value={logoUrl}
                     onChange={(e) => setLogoUrl(e.target.value)}
                   />
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">Surface Adaptive Preview:</span>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-2xs" title="Light theme & bright surfaces">
+                        <img 
+                          src={logoUrl || "/logo.png"} 
+                          alt="Light surface logo" 
+                          className="h-5 w-auto object-contain" 
+                        />
+                        <span className="text-[10px] font-mono text-slate-400">Light BG</span>
+                      </div>
+                      <div className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-2xs" title="Dark theme, sidebar, & modal surfaces">
+                        <img 
+                          src={logoUrl || "/white_logo.png"} 
+                          alt="Dark surface logo" 
+                          className="h-5 w-auto object-contain" 
+                        />
+                        <span className="text-[10px] font-mono text-slate-400">Dark BG</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

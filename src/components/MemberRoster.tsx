@@ -26,6 +26,7 @@ import { UserProfile, UserRole, CustomRole } from "../types";
 import { resolveMemberRole, ROLE_COLOR_MAP } from "../roleUtils";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import TagInput from "./TagInput";
+import { RosterGridSkeleton, WhoOnlineSkeleton } from "./DashboardSkeletons";
 
 interface MemberRosterProps {
   currentUser: UserProfile;
@@ -480,7 +481,9 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
       {/* Directory Grid of Beautiful Member Cards & Presence Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         <div className="lg:col-span-3 space-y-6">
-          {filteredRoster.length === 0 ? (
+          {roster.length === 0 ? (
+            <RosterGridSkeleton count={6} />
+          ) : filteredRoster.length === 0 ? (
             <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
           <div className="size-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto border border-slate-100 text-slate-400">
             <User className="size-6 stroke-[1.5]" />
@@ -1024,6 +1027,9 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
 
     {/* Side Panel for Online Members */}
     <div className="lg:col-span-1 space-y-4">
+      {roster.length === 0 ? (
+        <WhoOnlineSkeleton />
+      ) : (
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden text-left">
         <div className="bg-slate-900 px-4 py-3.5 flex items-center justify-between text-white">
           <div className="flex items-center space-x-2">
@@ -1107,6 +1113,7 @@ export default function MemberRoster({ currentUser, roster }: MemberRosterProps)
           </div>
         </div>
       </div>
+      )}
     </div>
   </div>
 

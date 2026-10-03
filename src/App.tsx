@@ -37,7 +37,7 @@ import {
   Database
 } from "lucide-react";
 import { UserProfile, Project, AppNotification } from "./types";
-const defaultLogoUrl = "/logo.png";
+import { getWorkspaceLogo, DEFAULT_WHITE_LOGO, DEFAULT_DARK_BLUE_LOGO } from "./utils/logo";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -67,7 +67,6 @@ export default function App() {
 
   const effectiveUser = currentUser;
   const { logoUrl: remoteLogoUrl, generalFundTransactions, customRoles } = useWorkspaceSettings(currentUser?.isOfflineMock);
-  const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
   const [roster, setRoster] = useState<UserProfile[]>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [isProjectsLoading, setIsProjectsLoading] = useState(true);
@@ -96,6 +95,9 @@ export default function App() {
     }
     return false;
   });
+
+  const activeLogoUrl = getWorkspaceLogo(remoteLogoUrl, isDark);
+  const sidebarLogoUrl = getWorkspaceLogo(remoteLogoUrl, true);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -809,6 +811,7 @@ export default function App() {
             onOpenLogin={() => setIsAuthModalOpen(true)} 
             currentUser={currentUser} 
             onSwitchToDatabase={() => setIsPublicView(false)} 
+            isDark={isDark}
           />
           
           {isAuthModalOpen && (
@@ -847,9 +850,9 @@ export default function App() {
             {/* Top Logo & App Context */}
             <div className="py-7 px-6 md:p-6 border-b border-slate-800 flex items-center justify-between md:block">
               <div className="flex items-center space-x-3">
-                <div className={`\${isSidebarCollapsed ? "h-10 w-10 justify-center" : "h-14 md:h-16 w-auto justify-start max-w-[240px]"} rounded-lg overflow-hidden flex items-center relative shrink-0 transition-all`}>
+                <div className={`${isSidebarCollapsed ? "h-10 w-10 justify-center" : "h-14 md:h-16 w-auto justify-start max-w-[240px]"} rounded-lg overflow-hidden flex items-center relative shrink-0 transition-all`}>
                   <img 
-                    src={activeLogoUrl || undefined} 
+                    src={sidebarLogoUrl} 
                     alt="AXOTIC Logo" 
                     className="h-full w-auto object-contain" 
                     referrerPolicy="no-referrer"

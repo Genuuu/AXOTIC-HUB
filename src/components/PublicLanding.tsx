@@ -27,7 +27,7 @@ import {
   Database
 } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup, useScroll, useTransform } from "motion/react";
-const defaultLogoUrl = "/logo.png";
+import { getWorkspaceLogo, DEFAULT_DARK_BLUE_LOGO, DEFAULT_WHITE_LOGO } from "../utils/logo";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -38,6 +38,7 @@ interface PublicLandingProps {
   onOpenLogin: () => void;
   currentUser?: UserProfile | null;
   onSwitchToDatabase?: () => void;
+  isDark?: boolean;
 }
 
 // Framer motion animation variants
@@ -428,7 +429,7 @@ const AchievementLightbox = ({ achievement, onClose }: { achievement: Achievemen
   );
 };
 
-export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToDatabase }: PublicLandingProps) {
+export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToDatabase, isDark }: PublicLandingProps) {
   const [copied, setCopied] = useState(false);
   const [activeBuild, setActiveBuild] = useState<string | null>(null);
   const [lightboxImageIndex, setLightboxImageIndex] = useState<{idx: number, imgIdx: number} | null>(null);
@@ -460,7 +461,7 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
   const { logoUrl: remoteLogoUrl } = useWorkspaceSettings();
-  const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
+  const activeLogoUrl = getWorkspaceLogo(remoteLogoUrl, Boolean(isDark));
 
   useEffect(() => {
     if (landingData.galleryPhotos && landingData.galleryPhotos.length > 1) {
@@ -736,15 +737,38 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
         <div className="w-full max-w-5xl flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
           <div className="w-full sm:w-auto flex items-center justify-center sm:justify-start">
             <div className="flex items-center justify-center space-x-3.5">
-              <img 
-                src={activeLogoUrl || undefined} 
-                alt="AXOTIC Logo" 
-                className="h-9 sm:h-11 md:h-13 w-auto max-w-[65vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all mx-auto sm:mx-0" 
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              {remoteLogoUrl ? (
+                <img 
+                  src={remoteLogoUrl} 
+                  alt="AXOTIC Logo" 
+                  className="h-9 sm:h-11 md:h-13 w-auto max-w-[65vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all mx-auto sm:mx-0" 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <>
+                  <img 
+                    src="/logo.png" 
+                    alt="AXOTIC Logo" 
+                    className="h-9 sm:h-11 md:h-13 w-auto max-w-[65vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all mx-auto sm:mx-0 dark:hidden" 
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                  <img 
+                    src="/white_logo.png" 
+                    alt="AXOTIC Logo" 
+                    className="h-9 sm:h-11 md:h-13 w-auto max-w-[65vw] sm:max-w-[220px] md:max-w-[280px] object-contain drop-shadow-xs transition-all mx-auto sm:mx-0 hidden dark:block" 
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </>
+              )}
             </div>
           </div>
 
@@ -843,15 +867,38 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
               className="relative mb-6 group flex items-center justify-center"
             >
               <div className="absolute -inset-6 bg-gradient-to-r from-blue-600/25 via-cyan-500/20 to-indigo-600/25 rounded-3xl blur-2xl opacity-75 group-hover:opacity-100 transition-opacity pointer-events-none" />
-              <img 
-                src={activeLogoUrl || undefined} 
-                alt="AXOTIC Title Logo" 
-                className="relative h-20 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              {remoteLogoUrl ? (
+                <img 
+                  src={remoteLogoUrl} 
+                  alt="AXOTIC Title Logo" 
+                  className="relative h-20 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <>
+                  <img 
+                    src="/logo.png" 
+                    alt="AXOTIC Title Logo" 
+                    className="relative h-20 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none dark:hidden"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                  <img 
+                    src="/white_logo.png" 
+                    alt="AXOTIC Title Logo" 
+                    className="relative h-20 sm:h-36 md:h-44 w-auto max-w-[85vw] object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300 select-none hidden dark:block"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </>
+              )}
             </motion.div>
             
             <h1 

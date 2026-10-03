@@ -708,9 +708,9 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
               title="Active Specialists Directory"
             >
               {roster.length === 0 ? (
-                <div className="flex -space-x-2 animate-pulse">
+                <div className="flex -space-x-2">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="size-10 rounded-full border-2 border-[#0f172a] bg-slate-700/60" />
+                    <div key={i} className="size-10 rounded-full border-2 border-[#0f172a] skeleton-shimmer" />
                   ))}
                 </div>
               ) : (
@@ -884,7 +884,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
           <div>
             <span className="text-5xl font-black tracking-tighter text-blue-950 block mb-3 font-display">
               {isProjectsLoading && projectsList.length === 0 ? (
-                <span className="inline-block h-12 w-20 bg-blue-200/70 animate-pulse rounded-xl" />
+                <span className="inline-block h-12 w-20 skeleton-shimmer rounded-xl" />
               ) : (
                 ongoingProjects.length
               )}
@@ -894,7 +894,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
             </span>
             <span className="text-xs font-semibold text-blue-600/70 flex items-center gap-1">
               {isProjectsLoading && projectsList.length === 0 ? (
-                <span className="inline-block h-3.5 w-32 bg-blue-200/60 animate-pulse rounded" />
+                <span className="inline-block h-3.5 w-32 skeleton-shimmer rounded" />
               ) : (
                 <><CheckCircle2 className="size-3.5" /> {projectsList.filter(p => p.status === "Finished").length} logged as complete</>
               )}
@@ -913,7 +913,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
           <div>
             <span className="text-5xl font-black tracking-tighter text-rose-950 block mb-3 font-display">
               {loadingInventory && inventory.length === 0 ? (
-                <span className="inline-block h-12 w-20 bg-rose-200/70 animate-pulse rounded-xl" />
+                <span className="inline-block h-12 w-20 skeleton-shimmer rounded-xl" />
               ) : (
                 lowStockItems.length
               )}
@@ -923,7 +923,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
             </span>
             <span className="text-xs font-semibold text-rose-600/70 flex items-center gap-1">
               {loadingInventory && inventory.length === 0 ? (
-                <span className="inline-block h-3.5 w-28 bg-rose-200/60 animate-pulse rounded" />
+                <span className="inline-block h-3.5 w-28 skeleton-shimmer rounded" />
               ) : (
                 <><Layers className="size-3.5" /> {inventory.length} total active parts</>
               )}
@@ -942,7 +942,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
           <div>
             <span className="text-5xl font-black tracking-tighter text-slate-900 block mb-3 font-display">
               {roster.length === 0 ? (
-                <span className="inline-block h-12 w-20 bg-slate-200/70 animate-pulse rounded-xl" />
+                <span className="inline-block h-12 w-20 skeleton-shimmer rounded-xl" />
               ) : (
                 roster.length
               )}
@@ -952,7 +952,7 @@ export default function HomeDashboard({ currentUser, roster, projectsList, isPro
             </span>
             <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
               {roster.length === 0 ? (
-                <span className="inline-block h-3.5 w-28 bg-slate-200/60 animate-pulse rounded" />
+                <span className="inline-block h-3.5 w-28 skeleton-shimmer rounded" />
               ) : (
                 <><ShieldCheck className="size-3.5 text-emerald-500" /> Fully cleared personnel</>
               )}

@@ -4,7 +4,7 @@ import { signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously } from 
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { Shield, Sparkles, X, Mail, ArrowRight, Key } from "lucide-react";
 import { UserRole, UserProfile } from "../types";
-const defaultLogoUrl = "/logo.png";
+import { getWorkspaceLogo } from "../utils/logo";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
 
 interface AuthModalProps {
@@ -20,7 +20,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
   const [fallbackEmail, setFallbackEmail] = useState("");
   
   const { logoUrl: remoteLogoUrl } = useWorkspaceSettings();
-  const activeLogoUrl = remoteLogoUrl || defaultLogoUrl;
+  const activeLogoUrl = getWorkspaceLogo(remoteLogoUrl, true);
 
   if (!isOpen) return null;
 
