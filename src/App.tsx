@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { auth, db, testConnectionObj, handleFirestoreError, OperationType, createGlobalNotification } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, onSnapshot, query, orderBy, doc, addDoc, serverTimestamp, setDoc, limit, updateDoc, arrayUnion } from "firebase/firestore";
@@ -41,17 +41,26 @@ const defaultLogoUrl = "/logo.png";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { motion, AnimatePresence } from "motion/react";
 
-// Import custom sub-panels
+// Public homepage loaded eagerly for instant visitor first paint
 import PublicLanding from "./components/PublicLanding";
-import AuthModal from "./components/AuthModal";
-import HomeDashboard from "./components/HomeDashboard";
-import ProjectHub from "./components/ProjectHub";
-import InventoryManager from "./components/InventoryManager";
-import MemberRoster from "./components/MemberRoster";
-import AdminSettings from "./components/AdminSettings";
-import IdeasBoard from "./components/IdeasBoard";
-import CompetitionsHub from "./components/CompetitionsHub";
-import { TreasuryHub } from "./components/TreasuryHub";
+
+// Lazy-loaded workspace modules to minimize initial bundle size
+const AuthModal = lazy(() => import("./components/AuthModal"));
+const HomeDashboard = lazy(() => import("./components/HomeDashboard"));
+const ProjectHub = lazy(() => import("./components/ProjectHub"));
+const InventoryManager = lazy(() => import("./components/InventoryManager"));
+const MemberRoster = lazy(() => import("./components/MemberRoster"));
+const AdminSettings = lazy(() => import("./components/AdminSettings"));
+const IdeasBoard = lazy(() => import("./components/IdeasBoard"));
+const CompetitionsHub = lazy(() => import("./components/CompetitionsHub"));
+const TreasuryHub = lazy(() => import("./components/TreasuryHub").then(m => ({ default: m.TreasuryHub })));
+
+const ViewLoadingSpinner = () => (
+  <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[300px]">
+    <div className="size-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+    <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading Module...</span>
+  </div>
+);
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -789,14 +798,18 @@ export default function App() {
             onSwitchToDatabase={() => setIsPublicView(false)} 
           />
           
-          <AuthModal 
-            isOpen={isAuthModalOpen} 
-            onClose={() => setIsAuthModalOpen(false)}
-            onAuthSuccess={(profile) => {
-              setCurrentUser(profile);
-              setIsPublicView(false);
-            }}
-          />
+          {isAuthModalOpen && (
+            <Suspense fallback={null}>
+              <AuthModal 
+                isOpen={isAuthModalOpen} 
+                onClose={() => setIsAuthModalOpen(false)}
+                onAuthSuccess={(profile) => {
+                  setCurrentUser(profile);
+                  setIsPublicView(false);
+                }}
+              />
+            </Suspense>
+          )}
         </div>
       ) : (
         
@@ -1483,8 +1496,9 @@ export default function App() {
               
               {/* View dispatch router */}
               <div className="flex-1 flex flex-col">
-                <AnimatePresence mode="wait">
-                  {activeTab === "home" && (
+                <Suspense fallback={<ViewLoadingSpinner />}>
+                  <AnimatePresence mode="wait">
+                    {activeTab === "home" && (
                     <motion.div
                       key="home"
                       initial={{ opacity: 0, y: 12 }}
@@ -1620,7 +1634,8 @@ export default function App() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+              </Suspense>
+            </div>
 
             </main>
 

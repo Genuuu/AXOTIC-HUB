@@ -89,9 +89,11 @@ export function parseBuildImages(rawUrl: string | undefined): string[] {
   return rawUrl.split(',').map(s => s.trim()).filter(Boolean);
 }
 
-const BuildCard = ({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
-  const images = parseBuildImages(spec.imageUrl);
-  const displayImages = images.length > 0 ? images : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`];
+const BuildCard = React.memo(({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
+  const images = React.useMemo(() => parseBuildImages(spec.imageUrl), [spec.imageUrl]);
+  const displayImages = React.useMemo(() => (
+    images.length > 0 ? images : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1000`]
+  ), [images, idx]);
   
   const [currentIdx, setCurrentIdx] = React.useState(0);
 
@@ -113,8 +115,9 @@ const BuildCard = ({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
             transition={{ duration: 0.25 }}
             src={displayImages[currentIdx]} 
             alt={spec.title} 
-            loading="lazy"
+            loading={idx < 2 ? "eager" : "lazy"}
             decoding="async"
+            fetchPriority={idx === 0 ? "high" : "auto"}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 cursor-pointer"
             referrerPolicy="no-referrer"
             onClick={() => onOpenLightbox(idx, currentIdx)}
@@ -204,12 +207,17 @@ const BuildCard = ({ spec, idx, onOpenLightbox, slowFadeIn }: any) => {
       </div>
     </motion.div>
   );
-};
+});
 
+BuildCard.displayName = "BuildCard";
 
 const BuildLightbox = React.forwardRef(({ spec, initialIdx, idx, onClose }: any, ref: any) => {
-  const images = spec.imageUrl ? spec.imageUrl.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0) : [];
-  const displayImages = images.length > 0 ? images : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1600`];
+  const images = React.useMemo(() => parseBuildImages(spec.imageUrl), [spec.imageUrl]);
+  const displayImages = React.useMemo(() => (
+    images.length > 0 
+      ? images 
+      : [`https://images.unsplash.com/photo-${idx % 2 === 0 ? '1581091226825-a6a2a5aee158' : '1485827404703-89b55fcc595e'}?auto=format&fit=crop&q=80&w=1600`]
+  ), [images, idx]);
   
   const [currentIdx, setCurrentIdx] = React.useState(initialIdx || 0);
 
@@ -554,14 +562,12 @@ export default function PublicLanding({ onOpenLogin, currentUser, onSwitchToData
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    document.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
     return () => {
       window.removeEventListener("scroll", handleScroll);
-      document.removeEventListener("scroll", handleScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [landingData]);
+  }, []);
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(landingData.contactEmail || "contact@teamaxotic.com");
