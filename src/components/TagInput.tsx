@@ -71,9 +71,7 @@ export default function TagInput({
     }
   };
 
-  const activeSuggestions = suggestions && suggestions.length > 0 
-    ? suggestions 
-    : ["ROS 2 & Autonomy", "Embedded C/C++", "PCB Design & KiCad", "Computer Vision & SLAM", "SolidWorks & 3D CAD", "Power Systems & BMS"];
+  const activeSuggestions = suggestions || [];
 
   return (
     <div className="space-y-2 text-left" id={id || "tag-input-container"}>
@@ -106,25 +104,27 @@ export default function TagInput({
         />
       </div>
 
-      {/* Suggested Quick Tags */}
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 select-none">
-        <span className="font-semibold uppercase tracking-wider text-[9px] text-slate-400 flex items-center gap-1">
-          <Terminal className="size-3 text-slate-300" /> Specialty Suggestions:
-        </span>
-        {activeSuggestions
-          .filter((s) => !tags.some((t) => t.toLowerCase() === s.toLowerCase()))
-          .slice(0, 8)
-          .map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => addTag(s)}
-              className="bg-slate-100/70 hover:bg-blue-50 border border-slate-200/50 hover:border-blue-200 px-2 py-0.5 rounded text-slate-600 hover:text-blue-700 text-[9.5px] font-semibold transition-all cursor-pointer font-sans"
-            >
-              + {s}
-            </button>
-          ))}
-      </div>
+      {/* Suggested Quick Tags (if active suggestions exist) */}
+      {activeSuggestions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 select-none">
+          <span className="font-semibold uppercase tracking-wider text-[9px] text-slate-400 flex items-center gap-1">
+            <Terminal className="size-3 text-slate-300" /> Specialty Suggestions:
+          </span>
+          {activeSuggestions
+            .filter((s) => !tags.some((t) => t.toLowerCase() === s.toLowerCase()))
+            .slice(0, 8)
+            .map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => addTag(s)}
+                className="bg-slate-100/70 hover:bg-blue-50 border border-slate-200/50 hover:border-blue-200 px-2 py-0.5 rounded text-slate-600 hover:text-blue-700 text-[9.5px] font-semibold transition-all cursor-pointer font-sans"
+              >
+                + {s}
+              </button>
+            ))}
+        </div>
+      )}
     </div>
   );
 }

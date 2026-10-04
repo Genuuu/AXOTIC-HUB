@@ -70,7 +70,7 @@ export function resolveMemberRole(
     }
   }
 
-  // If customRoleName provided
+  // If customRoleName provided and matches an active role
   if (customRoleName) {
     const found = customRoles.find(r => r.name.toLowerCase() === customRoleName.toLowerCase());
     if (found) {
@@ -82,16 +82,20 @@ export function resolveMemberRole(
         dotClass: colors.dot
       };
     }
-    return {
-      name: customRoleName,
-      badgeClass: ROLE_COLOR_MAP.blue.badge,
-      borderClass: ROLE_COLOR_MAP.blue.border,
-      dotClass: ROLE_COLOR_MAP.blue.dot
-    };
   }
 
-  // Fallback to clearance role
+  // Fallback to active role matching clearance from customRoles
   if (fallbackRole === "admin") {
+    const adminRole = customRoles.find(r => r.clearance === "admin");
+    if (adminRole) {
+      const colors = ROLE_COLOR_MAP[adminRole.color] || ROLE_COLOR_MAP.rose;
+      return {
+        name: adminRole.name,
+        badgeClass: colors.badge,
+        borderClass: colors.border,
+        dotClass: colors.dot
+      };
+    }
     return {
       name: "Team Lead & Admin",
       badgeClass: ROLE_COLOR_MAP.rose.badge,
@@ -101,11 +105,32 @@ export function resolveMemberRole(
   }
 
   if (fallbackRole === "moderator") {
+    const modRole = customRoles.find(r => r.clearance === "moderator");
+    if (modRole) {
+      const colors = ROLE_COLOR_MAP[modRole.color] || ROLE_COLOR_MAP.purple;
+      return {
+        name: modRole.name,
+        badgeClass: colors.badge,
+        borderClass: colors.border,
+        dotClass: colors.dot
+      };
+    }
     return {
       name: "Operations Moderator",
       badgeClass: ROLE_COLOR_MAP.purple.badge,
       borderClass: ROLE_COLOR_MAP.purple.border,
       dotClass: ROLE_COLOR_MAP.purple.dot
+    };
+  }
+
+  const memberRole = customRoles.find(r => r.clearance === "member") || customRoles.find(r => r.clearance !== "admin") || customRoles[0];
+  if (memberRole) {
+    const colors = ROLE_COLOR_MAP[memberRole.color] || ROLE_COLOR_MAP.blue;
+    return {
+      name: memberRole.name,
+      badgeClass: colors.badge,
+      borderClass: colors.border,
+      dotClass: colors.dot
     };
   }
 

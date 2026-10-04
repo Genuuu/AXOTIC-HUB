@@ -82,29 +82,14 @@ export const ALL_PERMISSIONS: PermissionDefinition[] = [
   }
 ];
 
-export const DEFAULT_SPECIALTY_TAGS: string[] = [
-  "ROS 2 & Autonomy",
-  "Embedded C/C++",
-  "PCB Design & KiCad",
-  "Computer Vision & SLAM",
-  "SolidWorks & 3D CAD",
-  "Power Systems & BMS",
-  "Kinematics & Motion",
-  "Microcontrollers & STM32",
-  "Machining & CNC",
-  "3D Printing & FDM/SLA",
-  "Telemetry & RF Comms",
-  "Control Theory & PID",
-  "Sensor Fusion & IMU",
-  "Actuators & BLDC Motors"
-];
+export const DEFAULT_SPECIALTY_TAGS: string[] = [];
 
 export const DEFAULT_DIVISION_TAGS: string[] = [
-  "Software & Autonomy",
   "Hardware & Electronics",
   "Mechanical & CAD",
   "Embedded & Firmware",
-  "Business & Outreach"
+  "Business & Outreach",
+  "General"
 ];
 
 export interface CustomRole {

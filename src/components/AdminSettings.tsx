@@ -58,6 +58,7 @@ import {
   ShieldCheck, 
   Palette, 
   Edit2, 
+  Pencil,
   X, 
 } from "lucide-react";
 import { UserProfile, UserRole, AdminLog, GeneralFundTransaction, CustomRole, DEFAULT_CUSTOM_ROLES, DEFAULT_DIVISION_TAGS, DEFAULT_SPECIALTY_TAGS, ALL_PERMISSIONS, PermissionKey } from "../types";
@@ -272,20 +273,22 @@ export default function AdminSettings({
   const [roleClearanceInput, setRoleClearanceInput] = useState<UserRole>("member");
   const [rolePermissionsInput, setRolePermissionsInput] = useState<PermissionKey[]>(["manage_ideas"]);
   const [roleMemberSearch, setRoleMemberSearch] = useState("");
+  const [editingMatrixSpecsUid, setEditingMatrixSpecsUid] = useState<string | null>(null);
+  const [tempMatrixSpecs, setTempMatrixSpecs] = useState("");
   
   const [divisionTags, setDivisionTags] = useState<string[]>(() => {
     const direct = localStorage.getItem("axotic_division_tags");
     if (direct) {
       try {
         const parsed = JSON.parse(direct);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (_) {}
     }
     const storedGen = localStorage.getItem("axotic_mock_general_settings");
     if (storedGen) {
       try {
         const p = JSON.parse(storedGen);
-        if (p.divisionTags && Array.isArray(p.divisionTags) && p.divisionTags.length > 0) return p.divisionTags;
+        if (p.divisionTags && Array.isArray(p.divisionTags)) return p.divisionTags;
       } catch (_) {}
     }
     return DEFAULT_DIVISION_TAGS;
@@ -297,14 +300,27 @@ export default function AdminSettings({
     if (direct) {
       try {
         const parsed = JSON.parse(direct);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          if (parsed.length === 14 && parsed.includes("ROS 2 & Autonomy")) {
+            localStorage.setItem("axotic_specialty_tags", JSON.stringify([]));
+            return [];
+          }
+          return parsed;
+        }
       } catch (_) {}
     }
     const storedGen = localStorage.getItem("axotic_mock_general_settings");
     if (storedGen) {
       try {
         const p = JSON.parse(storedGen);
-        if (p.specialtyTags && Array.isArray(p.specialtyTags) && p.specialtyTags.length > 0) return p.specialtyTags;
+        if (p.specialtyTags && Array.isArray(p.specialtyTags)) {
+          if (p.specialtyTags.length === 14 && p.specialtyTags.includes("ROS 2 & Autonomy")) {
+            p.specialtyTags = [];
+            localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+            return [];
+          }
+          return p.specialtyTags;
+        }
       } catch (_) {}
     }
     return DEFAULT_SPECIALTY_TAGS;
@@ -316,6 +332,7 @@ export default function AdminSettings({
   const [editCustomRoleId, setEditCustomRoleId] = useState<string>("core_engineer");
   const [editSubTeam, setEditSubTeam] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editSpecs, setEditSpecs] = useState("");
 
   // General Settings States
   const [workspaceName, setWorkspaceName] = useState("AXOTIC Robotics Hub");
@@ -721,23 +738,40 @@ export default function AdminSettings({
   // Load Users Roster dynamically
   useEffect(() => {
     if (currentUser.isOfflineMock) {
+      const parseAndBackfillRoster = (storedJson: string) => {
+        try {
+          const list: UserProfile[] = JSON.parse(storedJson);
+          let needsUpdate = false;
+          const updated = list.map(u => {
+            let nextUser = { ...u };
+            if (nextUser.specifications && (
+              nextUser.specifications.includes("ROS 2 & Autonomy") ||
+              nextUser.specifications.includes("PCB Design & KiCad") ||
+              nextUser.specifications.includes("Control Theory & PID")
+            )) {
+              needsUpdate = true;
+              nextUser.specifications = "";
+            }
+            return nextUser;
+          });
+          if (needsUpdate) {
+            localStorage.setItem("axotic_mock_roster", JSON.stringify(updated));
+            setRoster(updated);
+          } else {
+            setRoster(list);
+          }
+        } catch (_) {}
+      };
+
       const loadMockRoster = () => {
         const stored = localStorage.getItem("axotic_mock_roster");
-        if (stored) {
-          try {
-            setRoster(JSON.parse(stored));
-          } catch (_) {}
-        }
+        if (stored) parseAndBackfillRoster(stored);
       };
       loadMockRoster();
 
       const handleUpdate = () => {
         const stored = localStorage.getItem("axotic_mock_roster");
-        if (stored) {
-          try {
-            setRoster(JSON.parse(stored));
-          } catch (_) {}
-        }
+        if (stored) parseAndBackfillRoster(stored);
       };
       window.addEventListener("axotic_db_update", handleUpdate);
       return () => window.removeEventListener("axotic_db_update", handleUpdate);
@@ -829,13 +863,78 @@ export default function AdminSettings({
     }
   };
 
+  // Helper to ensure deleted division tags are never shown and always resolve to active registered divisions
+  const resolveMemberDivision = (subTeam?: string): string => {
+    const active = divisionTags && divisionTags.length > 0 ? divisionTags : ["General"];
+    if (!subTeam) return active[0] || "General";
+    const match = active.find(dt => dt.toLowerCase() === subTeam.toLowerCase());
+    if (match) return match;
+    return active[0] || "General";
+  };
+
+  // Auto-heal members holding deleted division tags or deleted roles across database & mock storage
+  useEffect(() => {
+    if (!roster || roster.length === 0) return;
+    const fallbackDivision = (divisionTags && divisionTags.length > 0) ? divisionTags[0] : "General";
+    
+    const needsHeal = roster.some(m => {
+      const isBadDivision = m.subTeam && divisionTags.length > 0 && !divisionTags.some(dt => dt.toLowerCase() === m.subTeam!.toLowerCase());
+      const isBadRoleId = m.customRoleId && customRoles.length > 0 && !customRoles.some(r => r.id === m.customRoleId);
+      const isBadRoleName = m.customRoleName && customRoles.length > 0 && !customRoles.some(r => r.name.toLowerCase() === m.customRoleName!.toLowerCase());
+      return isBadDivision || isBadRoleId || isBadRoleName;
+    });
+
+    if (needsHeal) {
+      const fixed = roster.map(m => {
+        let updated = { ...m };
+        if (m.subTeam && divisionTags.length > 0 && !divisionTags.some(dt => dt.toLowerCase() === m.subTeam!.toLowerCase())) {
+          updated.subTeam = fallbackDivision;
+        }
+        const hasMatchingRoleId = m.customRoleId && customRoles.some(r => r.id === m.customRoleId);
+        const hasMatchingRoleName = m.customRoleName && customRoles.some(r => r.name.toLowerCase() === m.customRoleName!.toLowerCase());
+        if ((m.customRoleId && !hasMatchingRoleId) || (m.customRoleName && !hasMatchingRoleName)) {
+          const fallbackRole = customRoles.find(r => r.clearance === m.role) || customRoles.find(r => r.clearance !== "admin") || customRoles[0];
+          if (fallbackRole) {
+            updated.customRoleId = fallbackRole.id;
+            updated.customRoleName = fallbackRole.name;
+            updated.role = fallbackRole.clearance;
+          }
+        }
+        return updated;
+      });
+      setRoster(fixed);
+      if (currentUser.isOfflineMock) {
+        localStorage.setItem("axotic_mock_roster", JSON.stringify(fixed));
+        if (fixed.some(m => m.uid === currentUser.uid)) {
+          const myFixed = fixed.find(m => m.uid === currentUser.uid);
+          if (myFixed) localStorage.setItem("axotic_local_auth", JSON.stringify(myFixed));
+        }
+        window.dispatchEvent(new Event("axotic_db_update"));
+      } else {
+        fixed.forEach(async (m) => {
+          try {
+            await updateDoc(doc(db, "users", m.uid), {
+              subTeam: m.subTeam,
+              customRoleId: m.customRoleId,
+              customRoleName: m.customRoleName,
+              role: m.role
+            });
+          } catch (e) {
+            console.warn(`Could not heal deleted subTeam/role for user ${m.uid}`, e);
+          }
+        });
+      }
+    }
+  }, [divisionTags, customRoles, roster, currentUser.isOfflineMock, currentUser.uid]);
+
   // Triggers user edit selection
   const handleSelectUserForEdit = (user: UserProfile) => {
     setSelectedUserForEdit(user);
     setEditRole(user.role);
     setEditCustomRoleId(user.customRoleId || (user.role === "admin" ? "admin" : "core_engineer"));
-    setEditSubTeam(user.subTeam || (divisionTags[0] || "Software & Autonomy"));
+    setEditSubTeam(resolveMemberDivision(user.subTeam));
     setEditPhone(user.phoneNumber || "");
+    setEditSpecs(user.specifications || "");
   };
 
   // Save custom role definition
@@ -917,6 +1016,7 @@ export default function AdminSettings({
     }
 
     const updatedList = customRoles.filter(r => r.id !== roleId);
+    const fallbackRole = updatedList.find(r => r.clearance !== "admin") || updatedList[0];
     
     // Always persist locally
     localStorage.setItem("axotic_custom_roles", JSON.stringify(updatedList));
@@ -925,8 +1025,29 @@ export default function AdminSettings({
     p.customRoles = updatedList;
     localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
     setCustomRoles(updatedList);
+
+    // Reassign any member currently holding deleted role
+    const updatedRoster = roster.map(u => {
+      const isRoleMatch = u.customRoleId === roleId || 
+        (u.customRoleName && u.customRoleName.toLowerCase() === role.name.toLowerCase());
+      if (isRoleMatch) {
+        return {
+          ...u,
+          customRoleId: fallbackRole.id,
+          customRoleName: fallbackRole.name,
+          role: fallbackRole.clearance
+        };
+      }
+      return u;
+    });
+    setRoster(updatedRoster);
+    localStorage.setItem("axotic_mock_roster", JSON.stringify(updatedRoster));
+    if (updatedRoster.some(m => m.uid === currentUser.uid)) {
+      const myUpdated = updatedRoster.find(m => m.uid === currentUser.uid);
+      if (myUpdated) localStorage.setItem("axotic_local_auth", JSON.stringify(myUpdated));
+    }
     window.dispatchEvent(new Event("axotic_db_update"));
-    setSuccessMsg(`Deleted role "${role.name}".`);
+    setSuccessMsg(`Deleted role "${role.name}". Affected members reassigned to "${fallbackRole.name}".`);
 
     if (currentUser.isOfflineMock) {
       return;
@@ -938,6 +1059,23 @@ export default function AdminSettings({
       }).catch(async () => {
         await setDoc(doc(db, "settings", "general"), { customRoles: updatedList }, { merge: true });
       });
+
+      const affectedMembers = roster.filter(u => 
+        u.customRoleId === roleId || 
+        (u.customRoleName && u.customRoleName.toLowerCase() === role.name.toLowerCase())
+      );
+      for (const m of affectedMembers) {
+        try {
+          await updateDoc(doc(db, "users", m.uid), {
+            customRoleId: fallbackRole.id,
+            customRoleName: fallbackRole.name,
+            role: fallbackRole.clearance
+          });
+        } catch (e) {
+          console.warn(`Could not reassign role for user ${m.uid}`, e);
+        }
+      }
+
       createAdminLog("ROLE_DELETED", `Removed role designation "${role.name}".`, currentUser);
     } catch (err) {
       console.warn("Deleted locally, but remote Firestore sync failed:", err);
@@ -1004,6 +1142,36 @@ export default function AdminSettings({
   const handleDeleteDivisionTag = async (tagToDelete: string) => {
     const updatedTags = divisionTags.filter(t => t !== tagToDelete);
     await saveDivisionTags(updatedTags);
+
+    const fallbackTag = updatedTags[0] || "General";
+
+    // Cascade update to all members who currently had tagToDelete as their subTeam
+    const updatedRoster = roster.map(u => {
+      if ((u.subTeam || "").toLowerCase() === tagToDelete.toLowerCase()) {
+        return { ...u, subTeam: fallbackTag };
+      }
+      return u;
+    });
+    setRoster(updatedRoster);
+    localStorage.setItem("axotic_mock_roster", JSON.stringify(updatedRoster));
+    if (updatedRoster.some(m => m.uid === currentUser.uid)) {
+      const myUpdated = updatedRoster.find(m => m.uid === currentUser.uid);
+      if (myUpdated) localStorage.setItem("axotic_local_auth", JSON.stringify(myUpdated));
+    }
+
+    if (!currentUser.isOfflineMock) {
+      const affected = roster.filter(u => (u.subTeam || "").toLowerCase() === tagToDelete.toLowerCase());
+      for (const m of affected) {
+        try {
+          await updateDoc(doc(db, "users", m.uid), { subTeam: fallbackTag });
+        } catch (e) {
+          console.warn(`Could not update subTeam for user ${m.uid}`, e);
+        }
+      }
+    }
+
+    window.dispatchEvent(new Event("axotic_db_update"));
+    setSuccessMsg(`Deleted division tag "${tagToDelete}". Affected members reassigned to "${fallbackTag}".`);
   };
 
   const saveDivisionTags = async (updatedTags: string[]) => {
@@ -1049,6 +1217,39 @@ export default function AdminSettings({
   const handleDeleteSpecialtyTag = async (tagToDelete: string) => {
     const updatedTags = specialtyTags.filter(t => t !== tagToDelete);
     await saveSpecialtyTags(updatedTags);
+
+    // Remove deleted tag from all members holding it
+    const updatedRoster = roster.map(u => {
+      if (u.specifications && u.specifications.toLowerCase().includes(tagToDelete.toLowerCase())) {
+        const cleaned = u.specifications
+          .split(",")
+          .map(s => s.trim())
+          .filter(s => s.toLowerCase() !== tagToDelete.toLowerCase())
+          .join(", ");
+        return { ...u, specifications: cleaned };
+      }
+      return u;
+    });
+    setRoster(updatedRoster);
+    localStorage.setItem("axotic_mock_roster", JSON.stringify(updatedRoster));
+
+    if (!currentUser.isOfflineMock) {
+      const affected = roster.filter(u => u.specifications && u.specifications.toLowerCase().includes(tagToDelete.toLowerCase()));
+      for (const m of affected) {
+        const cleaned = m.specifications!
+          .split(",")
+          .map(s => s.trim())
+          .filter(s => s.toLowerCase() !== tagToDelete.toLowerCase())
+          .join(", ");
+        try {
+          await updateDoc(doc(db, "users", m.uid), { specifications: cleaned });
+        } catch (e) {
+          console.warn(`Could not remove deleted specialty tag from user ${m.uid}`, e);
+        }
+      }
+    }
+
+    window.dispatchEvent(new Event("axotic_db_update"));
   };
 
   const saveSpecialtyTags = async (updatedTags: string[]) => {
@@ -1183,6 +1384,50 @@ export default function AdminSettings({
     }
   };
 
+  // Quick update member specialty competency tags from matrix
+  const handleQuickUpdateSpecifications = async (targetUser: UserProfile, newSpecs: string) => {
+    const updatedRoster = roster.map(u => 
+      u.uid === targetUser.uid 
+        ? {
+            ...u,
+            specifications: newSpecs.trim()
+          }
+        : u
+    );
+    setRoster(updatedRoster);
+    localStorage.setItem("axotic_mock_roster", JSON.stringify(updatedRoster));
+    if (currentUser.uid === targetUser.uid) {
+      const currentStored = localStorage.getItem("axotic_local_auth");
+      if (currentStored) {
+        try {
+          const parsed = JSON.parse(currentStored);
+          localStorage.setItem("axotic_local_auth", JSON.stringify({
+            ...parsed,
+            specifications: newSpecs.trim()
+          }));
+        } catch (_) {}
+      }
+    }
+    window.dispatchEvent(new Event("axotic_db_update"));
+    setSuccessMsg(`Updated specialty tags for ${targetUser.displayName}.`);
+    setTimeout(() => setSuccessMsg(""), 4000);
+
+    if (currentUser.isOfflineMock) {
+      return;
+    }
+
+    try {
+      const userRef = doc(db, "users", targetUser.uid);
+      await updateDoc(userRef, {
+        specifications: newSpecs.trim()
+      }).catch(async () => {
+        await setDoc(userRef, { specifications: newSpecs.trim() }, { merge: true });
+      });
+    } catch (err) {
+      console.warn("Tags saved locally, remote sync warning:", err);
+    }
+  };
+
   // Master Save All Settings & Member Roles Button
   const handleSaveAllMemberRoles = async () => {
     setLoading(true);
@@ -1219,13 +1464,15 @@ export default function AdminSettings({
               role: u.role,
               customRoleId: u.customRoleId,
               customRoleName: u.customRoleName,
-              subTeam: u.subTeam
+              subTeam: u.subTeam,
+              specifications: u.specifications || ""
             }).catch(async () => {
               await setDoc(doc(db, "users", u.uid), {
                 role: u.role,
                 customRoleId: u.customRoleId,
                 customRoleName: u.customRoleName,
-                subTeam: u.subTeam
+                subTeam: u.subTeam,
+                specifications: u.specifications || ""
               }, { merge: true });
             });
           } catch (_) {}
@@ -1271,12 +1518,14 @@ export default function AdminSettings({
               customRoleId: chosenRole ? chosenRole.id : undefined,
               customRoleName: finalRoleName,
               subTeam: editSubTeam.trim(),
-              phoneNumber: editPhone.trim()
+              phoneNumber: editPhone.trim(),
+              specifications: editSpecs.trim()
             };
             localStorage.setItem("axotic_mock_roster", JSON.stringify(rosterList));
+            setRoster(rosterList);
             createAdminLog(
               "USER_OVERRIDE",
-              `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${finalRoleName}", department set to "${editSubTeam}", contact: "${editPhone}".`,
+              `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${finalRoleName}", department set to "${editSubTeam}", tags set to "${editSpecs.trim()}", contact: "${editPhone}".`,
               currentUser
             );
             window.dispatchEvent(new Event("axotic_db_update"));
@@ -1294,13 +1543,15 @@ export default function AdminSettings({
           customRoleId: chosenRole ? chosenRole.id : undefined,
           customRoleName: finalRoleName,
           subTeam: editSubTeam.trim(),
-          phoneNumber: editPhone.trim()
+          phoneNumber: editPhone.trim(),
+          specifications: editSpecs.trim()
         });
         createAdminLog(
           "USER_OVERRIDE",
-          `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${finalRoleName}", department set to "${editSubTeam}", contact: "${editPhone}".`,
+          `Overrode clearance profile for "${selectedUserForEdit.displayName}": role assigned to "${finalRoleName}", department set to "${editSubTeam}", tags set to "${editSpecs.trim()}", contact: "${editPhone}".`,
           currentUser
         );
+        window.dispatchEvent(new Event("axotic_db_update"));
         setSuccessMsg(`Successfully saved administrative profile changes for ${selectedUserForEdit.displayName}.`);
         setSelectedUserForEdit(null);
       } catch (err) {
@@ -1911,26 +2162,38 @@ export default function AdminSettings({
                       isSelected ? "bg-blue-50/20 border-l-2 border-blue-500" : ""
                     }`}
                   >
-                    <div className="flex items-center space-x-3 min-w-0">
+                    <div className="flex items-start space-x-3 min-w-0 flex-1">
                       <img 
                         src={user.avatarUrl || undefined} 
                         alt={user.displayName} 
-                        className="size-9 rounded-lg border border-slate-100 shrink-0"
+                        className="size-9 rounded-lg border border-slate-100 shrink-0 object-cover mt-0.5"
                       />
-                      <div className="min-w-0 text-left">
+                      <div className="min-w-0 text-left flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-slate-800 truncate block max-w-[130px]">{user.displayName}</span>
-                          {user.role === "admin" ? (
-                            <span className="bg-blue-50 text-blue-700 text-[8px] font-bold px-1.5 py-0.2 rounded border border-blue-200/30">
-                              Admin
-                            </span>
-                          ) : (
-                            <span className="bg-slate-50 text-slate-500 text-[8px] font-bold px-1.5 py-0.2 rounded border border-slate-200/40">
-                              Member
-                            </span>
-                          )}
+                          <span className="text-xs font-bold text-slate-800 truncate block max-w-[150px]">{user.displayName}</span>
+                          {(() => {
+                            const roleBadge = resolveMemberRole(user.customRoleId, user.customRoleName, user.role, customRoles);
+                            return (
+                              <span className={`px-2 py-0.5 text-[8.5px] font-bold font-mono uppercase tracking-wider rounded-md border flex items-center gap-1 shrink-0 ${roleBadge.badgeClass}`}>
+                                <span className={`size-1.5 rounded-full ${roleBadge.dotClass}`} />
+                                {roleBadge.name}
+                              </span>
+                            );
+                          })()}
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200/80 text-[9px] font-bold px-2 py-0.5 rounded shrink-0">
+                            {resolveMemberDivision(user.subTeam)}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 font-mono block truncate">{user.email}</span>
+                        <span className="text-[10px] text-slate-400 font-mono block truncate mt-0.5">{user.email}</span>
+                        {user.specifications && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {user.specifications.split(",").map(s => s.trim()).filter(Boolean).map(tag => (
+                              <span key={tag} className="px-1.5 py-0.2 bg-purple-50 text-purple-700 border border-purple-200/60 rounded text-[9px] font-medium font-sans">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2040,6 +2303,21 @@ export default function AdminSettings({
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 font-sans">
+                      Engineering Specialties & Technical Competencies (Tags)
+                    </label>
+                    <TagInput
+                      value={editSpecs}
+                      onChange={(val) => setEditSpecs(val)}
+                      suggestions={specialtyTags}
+                      placeholder="Type technical competency and press Enter or comma..."
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block font-sans">
+                      Choose from registered technical specialty tags or type custom competencies.
+                    </span>
                   </div>
                 </div>
 
@@ -2424,6 +2702,7 @@ export default function AdminSettings({
                     <th className="py-3 px-4">Member</th>
                     <th className="py-3 px-4">Role Designation</th>
                     <th className="py-3 px-4">Division / Tag</th>
+                    <th className="py-3 px-4">Specialty Tags</th>
                     <th className="py-3 px-4">Clearance</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -2437,7 +2716,8 @@ export default function AdminSettings({
                         u.displayName.toLowerCase().includes(q) ||
                         u.email.toLowerCase().includes(q) ||
                         (u.customRoleName && u.customRoleName.toLowerCase().includes(q)) ||
-                        (u.subTeam && u.subTeam.toLowerCase().includes(q))
+                        (u.subTeam && u.subTeam.toLowerCase().includes(q)) ||
+                        (u.specifications && u.specifications.toLowerCase().includes(q))
                       );
                     })
                     .map(member => {
@@ -2478,7 +2758,7 @@ export default function AdminSettings({
                               <input
                                 type="text"
                                 list="matrix-subteam-presets"
-                                value={member.subTeam || ""}
+                                value={resolveMemberDivision(member.subTeam)}
                                 placeholder="Division tag..."
                                 onChange={(e) => handleQuickUpdateSubTeam(member, e.target.value)}
                                 className="bg-slate-50 hover:bg-white border border-slate-200 focus:border-blue-500 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-hidden w-44"
@@ -2489,6 +2769,63 @@ export default function AdminSettings({
                                 ))}
                               </datalist>
                             </div>
+                          </td>
+
+                          <td className="py-3 px-4 max-w-[280px]">
+                            {editingMatrixSpecsUid === member.uid ? (
+                              <div className="space-y-1.5 min-w-[210px] bg-slate-50 p-2 rounded-xl border border-slate-200">
+                                <TagInput
+                                  value={tempMatrixSpecs}
+                                  onChange={(val) => setTempMatrixSpecs(val)}
+                                  suggestions={specialtyTags}
+                                  placeholder="Type specialty tag..."
+                                />
+                                <div className="flex items-center gap-1.5 justify-end pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingMatrixSpecsUid(null)}
+                                    className="px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-md bg-white hover:bg-slate-50 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleQuickUpdateSpecifications(member, tempMatrixSpecs);
+                                      setEditingMatrixSpecsUid(null);
+                                    }}
+                                    className="px-2.5 py-0.5 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-2xs cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Check className="size-3" /> Save Tags
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-1 group/specs">
+                                {member.specifications ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {member.specifications.split(",").map(s => s.trim()).filter(Boolean).map(tag => (
+                                      <span key={tag} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200/60 rounded text-[9.5px] font-medium font-sans whitespace-nowrap">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic font-medium">None registered</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingMatrixSpecsUid(member.uid);
+                                    setTempMatrixSpecs(member.specifications || "");
+                                  }}
+                                  className="opacity-70 group-hover/specs:opacity-100 p-1 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all cursor-pointer shrink-0 ml-1"
+                                  title="Edit Specialty Tags"
+                                >
+                                  <Pencil className="size-3" />
+                                </button>
+                              </div>
+                            )}
                           </td>
 
                           <td className="py-3 px-4">

@@ -46,7 +46,8 @@ import {
   Eye,
   EyeOff,
   Minimize2,
-  Maximize2
+  Maximize2,
+  ArrowRightLeft
 } from "lucide-react";
 import { Project, ProjectStatus, UserProfile, ProjectLog, AllocatedHardware, InventoryItem, BudgetItem, GeneralFundAllocation, MemberContribution, PeerTransfer, GeneralFundTransaction } from "../types";
 import { useWorkspaceSettings } from "../useWorkspaceSettings";
@@ -114,6 +115,16 @@ export default function ProjectHub({
   // Real-time states for the selected project workspace
   const [projectLogs, setProjectLogs] = useState<ProjectLog[]>([]);
   const [allocatedHardware, setAllocatedHardware] = useState<AllocatedHardware[]>([]);
+  const [expandedHwIds, setExpandedHwIds] = useState<Set<string>>(new Set());
+
+  const toggleExpandHw = (id: string) => {
+    setExpandedHwIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   
   // Create Project Form state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -3403,32 +3414,63 @@ export default function ProjectHub({
                     No parts checked out to this workstation yet. Allocate stock parts below to solder them to this build shield!
                   </div>
                 ) : (
-                  allocatedHardware.map((hw, idx) => (
-                    <div key={`${hw.id}-${idx}`} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between hover:border-slate-350 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800">{hw.name}</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded border border-slate-200">
-                            Quantity: {hw.quantity}
-                          </span>
-                          {canModifyProject(selectedProject) && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeallocateClick(hw)}
-                              className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-red-505 transition-colors cursor-pointer border border-transparent hover:border-red-100"
-                              title="Return parts to stock"
-                            >
-                              <X className="size-3.5" />
-                            </button>
-                          )}
+                  allocatedHardware.map((hw, idx) => {
+                    const isExpanded = expandedHwIds.has(hw.id);
+                    return (
+                      <div 
+                        key={`${hw.id}-${idx}`} 
+                        className={`bg-white rounded-lg border transition-all overflow-hidden ${
+                          isExpanded ? "border-blue-400 shadow-2xs" : "border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        {/* Collapsed Linear Row */}
+                        <div 
+                          onClick={() => toggleExpandHw(hw.id)}
+                          className="p-2.5 px-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/70 transition-colors select-none"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold text-slate-800 truncate">{hw.name}</span>
+                            {hw.category && (
+                              <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 text-[9px] font-mono rounded">
+                                {hw.category}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-mono font-bold rounded border border-blue-100">
+                              Qty: {hw.quantity}
+                            </span>
+                            <ChevronDown className={`size-3.5 text-slate-400 transition-transform duration-200 ${isExpanded ? "rotate-180 text-blue-600" : ""}`} />
+                          </div>
                         </div>
+
+                        {/* Expanded Details Line Drawer */}
+                        {isExpanded && (
+                          <div className="px-3 pb-2.5 pt-1 border-t border-slate-100 bg-slate-50/50 space-y-2 text-[10px] animate-fade-in text-left">
+                            <div className="flex justify-between items-center text-slate-500 font-sans">
+                              <span>Authorized by: <strong className="text-slate-700">{hw.allocatedByName}</strong></span>
+                              <span>Date: {new Date(hw.allocatedAt).toLocaleDateString()}</span>
+                            </div>
+                            {canModifyProject(selectedProject) && (
+                              <div className="pt-1.5 flex justify-end border-t border-slate-200/50">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeallocateClick(hw);
+                                  }}
+                                  className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-md text-[10px] font-semibold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                  title="Return parts to stock"
+                                >
+                                  <ArrowRightLeft className="size-3" /> Return to Stockroom
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between items-center text-[9px] text-slate-400 font-sans mt-2 pt-1 border-t border-slate-50">
-                        <span>Authorized by: <strong>{hw.allocatedByName}</strong></span>
-                        <span>Date: {new Date(hw.allocatedAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

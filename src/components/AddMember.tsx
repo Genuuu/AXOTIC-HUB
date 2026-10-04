@@ -16,7 +16,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
   const [email, setEmail] = useState("");
   const { customRoles, divisionTags, specialtyTags } = useWorkspaceSettings(currentUser.isOfflineMock);
   const [selectedRoleId, setSelectedRoleId] = useState("core_engineer");
-  const [subTeam, setSubTeam] = useState(divisionTags[0] || "Software & Autonomy");
+  const [subTeam, setSubTeam] = useState(divisionTags[0] || "General");
   const [customDivision, setCustomDivision] = useState("");
   const [specifications, setSpecifications] = useState("");
   const [birthday, setBirthday] = useState("");
@@ -211,7 +211,7 @@ export default function AddMember({ currentUser }: AddMemberProps) {
     setDisplayName("");
     setEmail("");
     setSelectedRoleId("core_engineer");
-    setSubTeam(divisionTags[0] || "Software & Autonomy");
+    setSubTeam(divisionTags[0] || "General");
     setCustomDivision("");
     setSpecifications("");
     setBirthday("");

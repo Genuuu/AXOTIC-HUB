@@ -19,7 +19,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
   const [devMode, setDevMode] = useState(false);
   const [fallbackEmail, setFallbackEmail] = useState("");
   
-  const { logoUrl: remoteLogoUrl } = useWorkspaceSettings();
+  const { logoUrl: remoteLogoUrl, divisionTags } = useWorkspaceSettings();
   const activeLogoUrl = getWorkspaceLogo(remoteLogoUrl, true);
 
   if (!isOpen) return null;
@@ -88,7 +88,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           customRoleName: "Team Lead & Admin",
           avatarUrl: photoURL || `https://api.dicebear.com/7.x/pixel-art/svg?seed=Genu`,
           joinedAt: new Date().toISOString(),
-          subTeam: "Software & Autonomy",
+          subTeam: (divisionTags && divisionTags[0]) || "General",
           birthday: "2003-08-15"
         };
         await setDoc(userDocRef, profile);

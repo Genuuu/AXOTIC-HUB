@@ -36,7 +36,7 @@ import {
   Landmark,
   Database
 } from "lucide-react";
-import { UserProfile, Project, AppNotification } from "./types";
+import { UserProfile, Project, AppNotification, DEFAULT_DIVISION_TAGS, DEFAULT_CUSTOM_ROLES } from "./types";
 import { getWorkspaceLogo, DEFAULT_WHITE_LOGO, DEFAULT_DARK_BLUE_LOGO } from "./utils/logo";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { motion, AnimatePresence } from "motion/react";
@@ -398,10 +398,69 @@ export default function App() {
 
     if (currentUser.isOfflineMock) {
       const seedRoster = () => {
+        const storedDivs = localStorage.getItem("axotic_division_tags");
+        let activeDivisions = DEFAULT_DIVISION_TAGS;
+        if (storedDivs) {
+          try {
+            const pDivs = JSON.parse(storedDivs);
+            if (Array.isArray(pDivs) && pDivs.length > 0) activeDivisions = pDivs;
+          } catch (_) {}
+        }
+        const defaultDiv = activeDivisions[0] || "General";
+        const hasSoftwareDiv = activeDivisions.some(d => d.toLowerCase() === "software & autonomy");
+        const initSubTeam = hasSoftwareDiv ? "Software & Autonomy" : defaultDiv;
+
+        const storedRoles = localStorage.getItem("axotic_custom_roles");
+        let activeRoles = DEFAULT_CUSTOM_ROLES;
+        if (storedRoles) {
+          try {
+            const pRoles = JSON.parse(storedRoles);
+            if (Array.isArray(pRoles) && pRoles.length > 0) activeRoles = pRoles;
+          } catch (_) {}
+        }
+
         const local = localStorage.getItem("axotic_mock_roster");
         if (local) {
           try {
-            setRoster(JSON.parse(local));
+            const parsed: UserProfile[] = JSON.parse(local);
+            // Ensure deleted default tags are stripped from mock members and heal deleted roles/divisions
+            let needsUpdate = false;
+            const updated = parsed.map(u => {
+              let nextUser = { ...u };
+              // Strip old default mock specifications
+              if (nextUser.specifications && (
+                nextUser.specifications.includes("ROS 2 & Autonomy") ||
+                nextUser.specifications.includes("PCB Design & KiCad") ||
+                nextUser.specifications.includes("Control Theory & PID")
+              )) {
+                needsUpdate = true;
+                nextUser.specifications = "";
+              }
+              // Heal deleted division tags
+              if (nextUser.subTeam && !activeDivisions.some(d => d.toLowerCase() === nextUser.subTeam.toLowerCase())) {
+                needsUpdate = true;
+                nextUser.subTeam = defaultDiv;
+              }
+              // Heal deleted custom roles
+              const hasMatchingRoleId = nextUser.customRoleId && activeRoles.some(r => r.id === nextUser.customRoleId);
+              const hasMatchingRoleName = nextUser.customRoleName && activeRoles.some(r => r.name.toLowerCase() === nextUser.customRoleName!.toLowerCase());
+              if ((nextUser.customRoleId && !hasMatchingRoleId) || (nextUser.customRoleName && !hasMatchingRoleName)) {
+                needsUpdate = true;
+                const fallbackRole = activeRoles.find(r => r.clearance === nextUser.role) || activeRoles.find(r => r.clearance !== "admin") || activeRoles[0];
+                if (fallbackRole) {
+                  nextUser.customRoleId = fallbackRole.id;
+                  nextUser.customRoleName = fallbackRole.name;
+                  nextUser.role = fallbackRole.clearance;
+                }
+              }
+              return nextUser;
+            });
+            if (needsUpdate) {
+              localStorage.setItem("axotic_mock_roster", JSON.stringify(updated));
+              setRoster(updated);
+            } else {
+              setRoster(parsed);
+            }
             return;
           } catch (_) {}
         }
@@ -415,8 +474,9 @@ export default function App() {
             customRoleId: "admin",
             customRoleName: "Team Lead & Admin",
             avatarUrl: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Genu",
-            subTeam: "Software & Autonomy",
+            subTeam: initSubTeam,
             phoneNumber: "+1 (555) 019-2834",
+            specifications: "",
             joinedAt: new Date(Date.now() - 3600000 * 24 * 50).toISOString(),
             isOfflineMock: true
           },
@@ -428,8 +488,9 @@ export default function App() {
             customRoleId: "core_engineer",
             customRoleName: "Core Engineer",
             avatarUrl: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Bob",
-            subTeam: "Hardware & Electronics",
+            subTeam: activeDivisions.find(d => d.toLowerCase().includes("hardware")) || defaultDiv,
             phoneNumber: "+1 (555) 014-9382",
+            specifications: "",
             joinedAt: new Date(Date.now() - 3600000 * 24 * 30).toISOString(),
             isOfflineMock: true
           },
@@ -438,11 +499,12 @@ export default function App() {
             displayName: "Sarah Connor",
             email: "sarah.connor@axotic.org",
             role: "member",
-            customRoleId: "software_lead",
-            customRoleName: "Lead Software Engineer",
+            customRoleId: activeRoles.find(r => r.id === "software_lead")?.id || activeRoles[0].id,
+            customRoleName: activeRoles.find(r => r.id === "software_lead")?.name || activeRoles[0].name,
             avatarUrl: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Sarah",
-            subTeam: "Software & Autonomy",
+            subTeam: initSubTeam,
             phoneNumber: "+1 (555) 012-4451",
+            specifications: "",
             joinedAt: new Date(Date.now() - 3600000 * 24 * 10).toISOString(),
             isOfflineMock: true
           }

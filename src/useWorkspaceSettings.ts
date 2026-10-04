@@ -35,14 +35,14 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
     if (direct) {
       try {
         const parsed = JSON.parse(direct);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (_) {}
     }
     const storedGen = localStorage.getItem("axotic_mock_general_settings");
     if (storedGen) {
       try {
         const p = JSON.parse(storedGen);
-        if (p.divisionTags && Array.isArray(p.divisionTags) && p.divisionTags.length > 0) return p.divisionTags;
+        if (p.divisionTags && Array.isArray(p.divisionTags)) return p.divisionTags;
       } catch (_) {}
     }
     return DEFAULT_DIVISION_TAGS;
@@ -53,14 +53,28 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
     if (direct) {
       try {
         const parsed = JSON.parse(direct);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // If contains old default 14 tags, clear them
+          if (parsed.length === 14 && parsed.includes("ROS 2 & Autonomy")) {
+            localStorage.setItem("axotic_specialty_tags", JSON.stringify([]));
+            return [];
+          }
+          return parsed;
+        }
       } catch (_) {}
     }
     const storedGen = localStorage.getItem("axotic_mock_general_settings");
     if (storedGen) {
       try {
         const p = JSON.parse(storedGen);
-        if (p.specialtyTags && Array.isArray(p.specialtyTags) && p.specialtyTags.length > 0) return p.specialtyTags;
+        if (p.specialtyTags && Array.isArray(p.specialtyTags)) {
+          if (p.specialtyTags.length === 14 && p.specialtyTags.includes("ROS 2 & Autonomy")) {
+            p.specialtyTags = [];
+            localStorage.setItem("axotic_mock_general_settings", JSON.stringify(p));
+            return [];
+          }
+          return p.specialtyTags;
+        }
       } catch (_) {}
     }
     return DEFAULT_SPECIALTY_TAGS;
@@ -81,6 +95,28 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
         } catch (_) {}
       }
 
+      const directDivs = localStorage.getItem("axotic_division_tags");
+      if (directDivs) {
+        try {
+          const parsed = JSON.parse(directDivs);
+          if (Array.isArray(parsed)) setDivisionTags(parsed);
+        } catch (_) {}
+      }
+
+      const directSpecs = localStorage.getItem("axotic_specialty_tags");
+      if (directSpecs) {
+        try {
+          const parsed = JSON.parse(directSpecs);
+          if (Array.isArray(parsed)) {
+            if (parsed.length === 14 && parsed.includes("ROS 2 & Autonomy")) {
+              setSpecialtyTags([]);
+            } else {
+              setSpecialtyTags(parsed);
+            }
+          }
+        } catch (_) {}
+      }
+
       const storedGen = localStorage.getItem("axotic_mock_general_settings");
       if (storedGen) {
         try {
@@ -89,11 +125,15 @@ export function useWorkspaceSettings(isOfflineMock?: boolean) {
           if (!directRoles && p.customRoles && Array.isArray(p.customRoles) && p.customRoles.length > 0) {
             setCustomRoles(p.customRoles);
           }
-          if (p.divisionTags && Array.isArray(p.divisionTags) && p.divisionTags.length > 0) {
+          if (!directDivs && p.divisionTags && Array.isArray(p.divisionTags)) {
             setDivisionTags(p.divisionTags);
           }
-          if (p.specialtyTags && Array.isArray(p.specialtyTags) && p.specialtyTags.length > 0) {
-            setSpecialtyTags(p.specialtyTags);
+          if (!directSpecs && p.specialtyTags && Array.isArray(p.specialtyTags)) {
+            if (p.specialtyTags.length === 14 && p.specialtyTags.includes("ROS 2 & Autonomy")) {
+              setSpecialtyTags([]);
+            } else {
+              setSpecialtyTags(p.specialtyTags);
+            }
           }
         } catch(e) {}
       }
